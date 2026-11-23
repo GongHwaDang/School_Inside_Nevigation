@@ -1162,6 +1162,54 @@
       .pref-btn:active, .pill:active { transform: none !important; }
     }
 
+
+    /* 미니맵 바로 아래 슬림 고정 [🎯 정면 맞춤] 보조 버튼 (AR 시야 최소화) */
+    .mini-calib-btn {
+      position: fixed;
+      top: calc(var(--hud-bottom) + 146px);
+      right: 12px;
+      z-index: 34;
+      width: 140px;
+      height: 36px;
+      padding: 0 10px;
+      border-radius: 11px;
+      border: 1.5px solid #e4bb72;
+      background: rgba(255, 248, 232, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #8f5708;
+      font-size: 12.5px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      box-shadow: 0 4px 12px rgba(26, 41, 34, 0.14);
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+    @media (max-width: 520px) {
+      .mini-calib-btn {
+        top: calc(var(--hud-bottom) + 118px);
+        right: 8px;
+        width: 112px;
+        height: 34px;
+        padding: 0 6px;
+        border-radius: 10px;
+        font-size: 11.5px;
+      }
+    }
+    .preset-copy-box {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f1f5f1;
+      border: 1px solid #cbd9ce;
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -1285,16 +1333,8 @@
       </div>
     </div>
 
-    <!-- 좌측 하단 엄지 컨트롤 (도착 유도 말풍선 + 강조 초록 버튼 + 보조 버튼) -->
+    <!-- 하단 엄지 컨트롤 (도착 유도 말풍선 + 강조 초록 버튼만 남겨 AR 시야 극대화) -->
     <div id="hudBottomLeft" class="hud-bottom-left">
-      <div id="testPop" class="test-pop">
-        <div class="row-between" style="font-size:12px; color:#334155; font-weight:700;">
-          <span>수동 시선 테스트 (<b id="manualDegText" style="color:#2563eb;">180°</b>)</span>
-          <button id="btnUseAutoCompass" type="button" class="btn btn-sm" style="min-height:30px; padding:3px 9px; font-size:11.5px;">자동나침반 복귀</button>
-        </div>
-        <input type="range" id="headingSlider" min="0" max="359" value="180" />
-      </div>
-
       <div id="nextStepHint" class="next-step-hint" role="status">
         👇 행정실에 도착하셨다면 아래 초록색 버튼을 눌러<br>다음 안내를 시작하세요!
       </div>
@@ -1306,14 +1346,9 @@
           <span id="btnNextArrow" class="arrow-bounce">▶</span>
         </button>
       </div>
-
-      <div class="thumb-sub-row">
-        <button id="btnCalibrate" type="button" class="btn btn-amber-soft">🎯 정면 맞춤</button>
-        <button id="btnTestToggle" type="button" class="btn">🧭 테스트</button>
-      </div>
     </div>
 
-    <!-- 우측 상단 화이트 SVG 플로팅 미니맵 -->
+    <!-- 우측 상단 화이트 SVG 플로팅 미니맵 + 미니맵 하단 슬림 정면 맞춤 버튼 -->
     <div id="minimapBackdrop" class="minimap-backdrop"></div>
     <div id="minimapWidget" class="minimap-widget" role="region" aria-label="본관 플로팅 미니맵">
       <svg id="minimapSvg" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet"></svg>
@@ -1334,6 +1369,7 @@
         <span id="miniExpandHint">탭 확대</span>
       </div>
     </div>
+    <button id="btnCalibrate" type="button" class="mini-calib-btn" title="화살표 방향이 어긋날 때 현재 정면으로 맞추기">🎯 정면 맞춤</button>
   </section>
 
   <!-- ===================================================================
@@ -1402,8 +1438,15 @@
         </div>
         <div class="row">
           <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
-          <button id="btnResetNorthOffset" type="button" class="btn btn-sm">0° 초기화</button>
+          <button id="btnResetNorthOffset" type="button" class="btn btn-sm">프리셋 초기화</button>
           <span id="liveCompassText" style="font-size:12.5px; color:#0284c7; font-weight:800;">실시간 나침반: 대기 중</span>
+        </div>
+        <div class="preset-copy-box">
+          <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
+          <div class="row">
+            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 0;" />
+            <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
+          </div>
         </div>
       </div>
 
@@ -1562,6 +1605,9 @@
       const CORRIDOR_Y = 250;
       // 한국어 TTS 말하기 속도 (원본 1.03에서 속도만 살짝 낮춤)
       const TTS_RATE = 0.96;
+      // 모든 방문객 기기에 기본 적용되는 건물 도면 북쪽 기준 프리셋 각도 (0~359)
+      // 학교 현장에서 편집기로 측정한 숫자를 여기에 넣고 배포하면 전 기기에 동일 적용됩니다.
+      const DEFAULT_BUILDING_NORTH_OFFSET = 0;
 
       /* =====================================================================
          1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
@@ -1754,7 +1800,8 @@
 
         return {
           version: 6,
-          buildingNorthOffset: 0,
+          buildingNorthOffset: DEFAULT_BUILDING_NORTH_OFFSET,
+          presetNorthVersion: DEFAULT_BUILDING_NORTH_OFFSET,
           floors: { 1: { image: null }, 2: { image: null }, 3: { image: null } },
           nodes,
           edges
@@ -1826,10 +1873,9 @@
         arArrowFrame: $('arArrowFrame'), arArrowSvg: $('arArrowSvg'),
         arSpecialBox: $('arSpecialBox'), arSpIcon: $('arSpIcon'), arSpTitle: $('arSpTitle'), arSpSub: $('arSpSub'),
         arDirTag: $('arDirTag'), arTargetTag: $('arTargetTag'),
-        testPop: $('testPop'), manualDegText: $('manualDegText'), headingSlider: $('headingSlider'), btnUseAutoCompass: $('btnUseAutoCompass'),
         nextStepHint: $('nextStepHint'),
         btnPrevStep: $('btnPrevStep'), btnNextStep: $('btnNextStep'), btnNextLabel: $('btnNextLabel'), btnNextArrow: $('btnNextArrow'),
-        btnCalibrate: $('btnCalibrate'), btnTestToggle: $('btnTestToggle'),
+        btnCalibrate: $('btnCalibrate'),
         minimapBackdrop: $('minimapBackdrop'), minimapWidget: $('minimapWidget'), minimapSvg: $('minimapSvg'),
         miniFloorChip: $('miniFloorChip'), miniFloorTabs: $('miniFloorTabs'),
         btnMiniRotate: $('btnMiniRotate'), btnMiniExpand: $('btnMiniExpand'),
@@ -1839,6 +1885,7 @@
         prefBtns: document.querySelectorAll('[data-pref]'), btnSwapRoute: $('btnSwapRoute'), btnApplyRoute: $('btnApplyRoute'),
         btnBackToAR: $('btnBackToAR'), northOffsetBadge: $('northOffsetBadge'),
         btnSaveBuildingNorth: $('btnSaveBuildingNorth'), btnResetNorthOffset: $('btnResetNorthOffset'), liveCompassText: $('liveCompassText'),
+        northPresetCodeIn: $('northPresetCodeIn'), btnCopyNorthPreset: $('btnCopyNorthPreset'),
         edFloorBtns: document.querySelectorAll('[data-efloor]'), toolBtns: document.querySelectorAll('[data-tool]'),
         imgInput: $('imgInput'), btnClearImg: $('btnClearImg'), edFloorTag: $('edFloorTag'), edHint: $('edHint'), editorSvg: $('editorSvg'),
         inspectPanel: $('inspectPanel'), inspectTitle: $('inspectTitle'),
@@ -2108,7 +2155,11 @@
       }
 
       function updateCalibBadge() {
-        dom.northOffsetBadge.textContent = `북쪽 오프셋: ${Math.round(Number(st.map.buildingNorthOffset) || 0)}°`;
+        const deg = Math.round(Number(st.map.buildingNorthOffset) || 0);
+        dom.northOffsetBadge.textContent = `북쪽 오프셋: ${deg}°`;
+        if (dom.northPresetCodeIn) {
+          dom.northPresetCodeIn.value = `const DEFAULT_BUILDING_NORTH_OFFSET = ${deg};`;
+        }
         dom.liveCompassText.textContent = st.hasSensorFix
           ? `실시간 나침반: ${Math.round(st.filteredHeading)}° (적용 시선 ${Math.round(getEffectiveHeading())}°)`
           : '실시간 나침반: 센서 대기 중';
@@ -2146,11 +2197,6 @@
           }
         }
 
-        if (!st.usingSimSlider) {
-          const eff = Math.round(getEffectiveHeading());
-          dom.headingSlider.value = eff;
-          dom.manualDegText.textContent = `${eff}°`;
-        }
         updateCalibBadge();
         updateHud();
       }
@@ -2176,11 +2222,6 @@
           st.filteredHeading = normDeg(st.filteredHeading + delta * 0.85);
         }
 
-        if (!st.usingSimSlider) {
-          const eff = Math.round(getEffectiveHeading());
-          dom.headingSlider.value = eff;
-          dom.manualDegText.textContent = `${eff}°`;
-        }
         updateCalibBadge();
         updateHud();
       }
@@ -2300,7 +2341,14 @@
           if (raw) {
             const p = JSON.parse(raw);
             if (p && p.nodes && Array.isArray(p.edges) && p.floors) {
-              if (typeof p.buildingNorthOffset !== 'number') p.buildingNorthOffset = 0;
+              if (typeof p.buildingNorthOffset !== 'number') {
+                p.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
+              }
+              // 배포 코드의 전역 프리셋 각도가 바뀌었으면 기존 방문객 캐시도 자동 동기화
+              if (p.presetNorthVersion !== DEFAULT_BUILDING_NORTH_OFFSET) {
+                p.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
+                p.presetNorthVersion = DEFAULT_BUILDING_NORTH_OFFSET;
+              }
               st.map = p;
             }
           }
@@ -2709,6 +2757,9 @@
         renderLandmarkChips(g.chips || []);
         dom.miniFloorChip.textContent = `${cur ? cur.floor : 1}F 본관`;
         dom.btnPrevStep.classList.toggle('hidden', st.step <= 0);
+        if (dom.btnCalibrate) {
+          dom.btnCalibrate.classList.toggle('hidden', g.kind !== 'walk');
+        }
 
         if (g.hintLine1 && (g.kind === 'walk' || g.kind === 'stairs' || g.kind === 'ev')) {
           dom.nextStepHint.textContent = '';
@@ -3043,8 +3094,6 @@
         const sn = st.map.nodes[st.startId];
         if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
           st.simHeading = sn.qrHeading;
-          dom.headingSlider.value = sn.qrHeading;
-          dom.manualDegText.textContent = `${sn.qrHeading}°`;
         }
         recalcRoute(true, false);
       }
@@ -3293,32 +3342,12 @@
           } else {
             st.simHeading = g.walkBearing;
           }
-          const eff = Math.round(getEffectiveHeading());
-          dom.headingSlider.value = eff;
-          dom.manualDegText.textContent = `${eff}°`;
           updateCalibBadge();
           updateHud();
           toast('현재 정면이 진행 방향에 맞춰졌습니다.', 'ok');
         };
 
-        dom.btnTestToggle.onclick = () => {
-          dom.testPop.classList.toggle('open');
-          requestAnimationFrame(syncHudBounds);
-        };
-        dom.headingSlider.oninput = (e) => {
-          st.usingSimSlider = true;
-          st.simHeading = Number(e.target.value);
-          dom.manualDegText.textContent = `${st.simHeading}°`;
-          updateCalibBadge();
-          updateHud();
-        };
-        dom.btnUseAutoCompass.onclick = () => {
-          st.usingSimSlider = false;
-          st.calibMode = st.hasSensorFix ? 'auto' : 'idle';
-          updateCalibBadge();
-          updateHud();
-          toast('자동 나침반 모드로 전환했습니다.', 'ok');
-        };
+
 
         // 미니맵
         dom.minimapWidget.onclick = () => setMinimapExpanded(!st.miniExpanded);
@@ -3363,8 +3392,6 @@
           const sn = st.map.nodes[st.startId];
           if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
             st.simHeading = sn.qrHeading;
-            dom.headingSlider.value = sn.qrHeading;
-            dom.manualDegText.textContent = `${sn.qrHeading}°`;
           }
           dom.routeSheetBg.classList.remove('open');
           recalcRoute(true, dom.startOverlay.classList.contains('hidden'));
@@ -3383,13 +3410,26 @@
           st.calibMode = 'auto';
           saveMap();
           updateCalibBadge();
-          toast(`도면 북쪽 기준(${st.map.buildingNorthOffset}°)이 저장되었습니다.`, 'ok');
+          toast(`도면 북쪽 기준(${st.map.buildingNorthOffset}°)이 저장되었습니다. 아래 프리셋 코드를 복사해 배포하세요!`, 'ok');
         };
         dom.btnResetNorthOffset.onclick = () => {
-          st.map.buildingNorthOffset = 0;
+          st.map.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
+          st.map.presetNorthVersion = DEFAULT_BUILDING_NORTH_OFFSET;
           saveMap();
           updateCalibBadge();
-          toast('도면 북쪽 오프셋을 0°로 초기화했습니다.');
+          toast(`도면 북쪽 오프셋을 기본 프리셋(${DEFAULT_BUILDING_NORTH_OFFSET}°)으로 되돌렸습니다.`);
+        };
+        dom.btnCopyNorthPreset.onclick = () => {
+          dom.northPresetCodeIn.select();
+          dom.northPresetCodeIn.setSelectionRange(0, 99999);
+          try { if (document.execCommand('copy')) { toast('프리셋 코드 복사 완료! HTML 상단에 붙여넣고 배포하세요.', 'ok'); return; } } catch (_) {}
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(dom.northPresetCodeIn.value)
+              .then(() => toast('프리셋 코드 복사 완료! HTML 상단에 붙여넣고 배포하세요.', 'ok'))
+              .catch(() => toast('코드를 직접 선택해 복사하세요.', 'warn'));
+          } else {
+            toast('코드를 직접 선택해 복사하세요.', 'warn');
+          }
         };
 
         // 편집기 이벤트
@@ -3500,7 +3540,7 @@
             try {
               const p = JSON.parse(r.result);
               if (!p || !p.nodes || !Array.isArray(p.edges) || !p.floors) throw 0;
-              if (typeof p.buildingNorthOffset !== 'number') p.buildingNorthOffset = 0;
+              if (typeof p.buildingNorthOffset !== 'number') p.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
               st.map = p; saveMap(); inspectNode(null); updateCalibBadge(); drawEditorSvg(); rebuildMinimapSvg(true);
               toast('JSON 데이터를 불러왔습니다.', 'ok');
             } catch (_) { toast('올바른 JSON 형식이 아닙니다.', 'err'); }
@@ -3553,8 +3593,6 @@
             const sn = st.map.nodes[qStart];
             if (typeof sn.qrHeading === 'number') {
               st.simHeading = sn.qrHeading;
-              dom.headingSlider.value = sn.qrHeading;
-              dom.manualDegText.textContent = `${sn.qrHeading}°`;
             }
             toast(`출발지 설정: ${sn.floor}층 ${sn.name}`, 'ok');
           }
