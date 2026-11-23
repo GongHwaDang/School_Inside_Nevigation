@@ -463,12 +463,16 @@
     }
     .next-step-hint::after {
       content: "";
-      position: absolute; bottom: -8px; left: 26px;
-      width: 13px; height: 13px;
-      background: rgba(255, 255, 255, 0.96);
-      border-right: 2px solid #10b981;
-      border-bottom: 2px solid #10b981;
-      transform: rotate(45deg);
+      position: absolute; bottom: -7px; left: 50%;
+      width: 12px; height: 12px;
+      background: rgba(247, 252, 247, 0.98);
+      border-right: 1px solid #78b68c;
+      border-bottom: 1px solid #78b68c;
+      transform: translateX(-50%) rotate(45deg);
+      pointer-events: none;
+    }
+    .next-step-hint.has-prev::after {
+      left: calc(50% + 30px);
     }
 
     .step-nav-row { display: flex; gap: 7px; width: 100%; }
@@ -1116,6 +1120,7 @@
     @media (prefers-contrast: more) {
       .hud-meta, .ar-dir-tag, .start-route-label { color: #075b61; }
       .lm-chip.cur, .lm-chip.dest, .start-route-box, .next-step-hint { border-width: 2px; }
+      .next-step-hint::after { border-right-width: 2px; border-bottom-width: 2px; bottom: -8px; }
     }
   
 
@@ -1499,7 +1504,7 @@
                 <option value="stairs">계단</option>
                 <option value="elevator">엘리베이터(E/V)</option>
                 <option value="entrance">출입구/현관</option>
-                <option value="outdoor">야외(놀이데크/라온마당)</option>
+                <option value="outdoor">야외 공간</option>
                 <option value="waypoint">복도 경유점</option>
               </select>
             </div>
@@ -1651,13 +1656,11 @@
           rooms: [
             { x: 60,  y: 95,  w: 60,  h: 130, label: '서쪽계단', kind: 'stairs' },
             { x: 128, y: 105, w: 572, h: 112, label: '지붕 (출입불가)', kind: 'roof' },
-            { x: 705, y: 95,  w: 150, h: 130, label: '놀이데크', kind: 'outdoor' },
             { x: 55,  y: 275, w: 120, h: 138, label: '도서관',   kind: 'special' },
             { x: 175, y: 275, w: 60,  h: 138, label: '전산실',   kind: 'special' },
             { x: 235, y: 275, w: 70,  h: 138, label: '1-1',      kind: 'classroom' },
             { x: 305, y: 275, w: 75,  h: 138, label: '교사연구실', kind: 'office' },
             { x: 380, y: 275, w: 125, h: 138, label: '놀이공간', kind: 'special' },
-            { x: 110, y: 422, w: 395, h: 58,  label: '라온마당', kind: 'outdoor' },
             { x: 505, y: 275, w: 18,  h: 138, label: 'EPS',      kind: 'eps' },
             { x: 523, y: 275, w: 50,  h: 138, label: 'E/V',      kind: 'elevator' },
             { x: 573, y: 275, w: 62,  h: 138, label: '중앙계단', kind: 'stairs' },
@@ -1759,16 +1762,13 @@
         add('1f_nurse',     '보건실',           1, 905, 375, 'special');       link('1f_nurse',     '1f_c_905');
 
         // --- 2층 ---
-        chainCorridor(2, [90, 115, 205, 270, 342, 442, 548, 604, 665, 725, 780, 792, 865, 935]);
+        chainCorridor(2, [90, 115, 205, 270, 342, 442, 548, 604, 665, 725, 792, 865, 935]);
         add('2f_stairs_w', '서쪽계단',   2, 90,  140, 'stairs',   180); link('2f_stairs_w', '2f_c_90');
-        add('2f_deck',     '놀이데크',   2, 780, 140, 'outdoor');       link('2f_deck',     '2f_c_780');
         add('2f_lib',      '도서관',     2, 115, 365, 'special');       link('2f_lib',      '2f_c_115');
         add('2f_comp',     '전산실',     2, 205, 365, 'special');       link('2f_comp',     '2f_c_205');
         add('2f_1_1',      '1-1',        2, 270, 365, 'classroom');     link('2f_1_1',      '2f_c_270');
         add('2f_lab',      '교사연구실', 2, 342, 365, 'office');        link('2f_lab',      '2f_c_342');
         add('2f_play',     '놀이공간',   2, 442, 365, 'special');       link('2f_play',     '2f_c_442');
-        add('2f_raon',     '라온마당',   2, 310, 452, 'outdoor');
-        link('2f_raon', '2f_play'); link('2f_raon', '2f_lib');
         add('2f_ev',       'E/V',        2, 548, 365, 'elevator', 0);   link('2f_ev',       '2f_c_548');
         add('2f_stairs_c', '중앙계단',   2, 604, 365, 'stairs',   0);   link('2f_stairs_c', '2f_c_604');
         add('2f_wc_f',     '화장실(여)', 2, 665, 365, 'restroom');      link('2f_wc_f',     '2f_c_665');
@@ -2349,6 +2349,10 @@
                 p.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
                 p.presetNorthVersion = DEFAULT_BUILDING_NORTH_OFFSET;
               }
+              // 출입 불가 구역(2층 라온마당·놀이데크)이 기존 캐시에 남아 있으면 자동 제거
+              const removedIds = new Set(['2f_raon', '2f_deck']);
+              removedIds.forEach((rid) => { if (p.nodes[rid]) delete p.nodes[rid]; });
+              p.edges = p.edges.filter((e) => !removedIds.has(e.from) && !removedIds.has(e.to));
               st.map = p;
             }
           }
@@ -2421,7 +2425,6 @@
         const sameSide = Object.values(st.map.nodes).filter((n) =>
           n.floor === node.floor &&
           n.type !== 'waypoint' &&
-          n.id !== '2f_raon' &&
           ((node.y < CORRIDOR_Y) ? (n.y < CORRIDOR_Y) : (n.y >= CORRIDOR_Y))
         );
         if (!sameSide.length) return false;
@@ -2440,7 +2443,7 @@
         const candidates = Object.values(st.map.nodes).filter((n) =>
           n.floor === cur.floor &&
           n.id !== cur.id && n.id !== nxt.id &&
-          n.type !== 'waypoint' && n.id !== '2f_raon' &&
+          n.type !== 'waypoint' &&
           n.x > minX && n.x < maxX
         );
         candidates.sort((a, b) => walkingEast ? (a.x - b.x) : (b.x - a.x));
@@ -2518,24 +2521,6 @@
         const ctaWalkPrompt = `${spokenNxt}에 도착하셨다면 아래 초록색 버튼을 눌러 다음 안내를 시작하세요.`;
         const hintLine1 = `👇 ${nxt.name}에 도착하셨다면 아래 초록색 버튼을 눌러`;
         const hintLine2 = '다음 안내를 시작하세요!';
-
-        if (nxt.id === '2f_raon' || cur.id === '2f_raon') {
-          const bearing = getBearing(cur, nxt);
-          const tts = nxt.id === '2f_raon'
-            ? `${spokenCur} 남쪽 출구로 나가면 라온마당입니다. ${ctaWalkPrompt}`
-            : `라온마당에서 ${josa(spokenNxt, '으로', '로')} 이동하세요. ${ctaWalkPrompt}`;
-          return {
-            kind: 'walk',
-            title: `${cur.name} → ${nxt.name}`,
-            tts,
-            hintLine1,
-            hintLine2,
-            chips: [{ text: cur.name, cls: 'cur' }, { text: nxt.name, cls: 'dest' }],
-            walkBearing: bearing,
-            dirTag: '출구 이동',
-            targetTag: nxt.name
-          };
-        }
 
         const dx = nxt.x - cur.x;
         const isCorridorWalk = Math.abs(dx) >= 35;
@@ -2757,6 +2742,7 @@
         renderLandmarkChips(g.chips || []);
         dom.miniFloorChip.textContent = `${cur ? cur.floor : 1}F 본관`;
         dom.btnPrevStep.classList.toggle('hidden', st.step <= 0);
+        dom.nextStepHint.classList.toggle('has-prev', st.step > 0);
         if (dom.btnCalibrate) {
           dom.btnCalibrate.classList.toggle('hidden', g.kind !== 'walk');
         }
