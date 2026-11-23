@@ -1,0 +1,3211 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>김천다수초등학교 본관 AR 네비게이션</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --glass: rgba(255, 255, 255, 0.94);
+      --glass-strong: rgba(255, 255, 255, 0.97);
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --border-hi: #38bdf8;
+      --text: #0f172a;
+      --text-sub: #334155;
+      --muted: #64748b;
+      --sky: #0284c7;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --indigo: #4f46e5;
+      --green: #059669;
+      --green-bright: #10b981;
+      --green-dark: #047857;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+      --red: #dc2626;
+      --red-bg: #fef2f2;
+      --shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.08);
+      --shadow-md: 0 10px 28px rgba(15, 23, 42, 0.14);
+      --shadow-lg: 0 20px 50px rgba(15, 23, 42, 0.22);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --hud-bottom: calc(160px + var(--safe-top));
+      --ctrl-bottom: calc(175px + var(--safe-bottom));
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+      line-height: 1.4; overscroll-behavior: none;
+    }
+    body.mode-nav { overflow: hidden; height: 100dvh; }
+    body.mode-editor { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100dvh; }
+    button, select, input { font-family: inherit; color: inherit; }
+    .hidden { display: none !important; }
+
+    /* 공통 버튼 (라이트모드 기반) */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      border: 1px solid var(--border-strong); background: var(--glass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      color: var(--text); padding: 9px 13px; border-radius: 13px;
+      font-size: 13.5px; font-weight: 700; cursor: pointer; min-height: 44px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.12s ease, opacity 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+      user-select: none; white-space: nowrap; position: relative; overflow: hidden;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-blue {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff; border-color: #1d4ed8;
+    }
+    .btn-sky {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #ffffff; border-color: transparent;
+    }
+    .btn-green {
+      background: linear-gradient(135deg, #059669 0%, #10b981 50%, #047857 100%);
+      color: #ffffff; border: 2px solid #ffffff;
+    }
+    .btn-amber-soft {
+      background: rgba(255, 251, 235, 0.96);
+      color: #92400e; border-color: #fcd34d;
+    }
+    .btn-red {
+      background: var(--red-bg); color: var(--red); border-color: #fca5a5;
+    }
+    .btn-sm { padding: 7px 11px; min-height: 38px; font-size: 12.5px; border-radius: 10px; }
+
+    /* 핵심 강조 애니메이션 (초록/파랑 펄스 글로우 + 빛 반사 Shimmer + 화살표 바운스) */
+    @keyframes pulse-green {
+      0%, 100% {
+        box-shadow: 0 8px 22px rgba(5, 150, 105, 0.45), 0 0 0 0 rgba(16, 185, 129, 0.72);
+      }
+      55% {
+        box-shadow: 0 10px 28px rgba(5, 150, 105, 0.55), 0 0 0 14px rgba(16, 185, 129, 0);
+      }
+    }
+    @keyframes pulse-blue {
+      0%, 100% {
+        box-shadow: 0 10px 26px rgba(37, 99, 235, 0.45), 0 0 0 0 rgba(37, 99, 235, 0.68);
+      }
+      55% {
+        box-shadow: 0 12px 30px rgba(37, 99, 235, 0.55), 0 0 0 14px rgba(37, 99, 235, 0);
+      }
+    }
+    @keyframes shimmer-sweep {
+      0% { transform: translateX(-140%) skewX(-22deg); }
+      45%, 100% { transform: translateX(240%) skewX(-22deg); }
+    }
+    @keyframes arrow-nudge {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(5px); }
+    }
+    @keyframes hint-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .btn-shimmer::after {
+      content: "";
+      position: absolute; top: 0; left: 0; width: 46%; height: 100%;
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.42) 50%, transparent 100%);
+      animation: shimmer-sweep 2.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .btn-cta-green {
+      background: linear-gradient(135deg, #059669 0%, #10b981 52%, #047857 100%);
+      color: #ffffff;
+      border: 2.5px solid #ffffff;
+      animation: pulse-green 1.8s ease-in-out infinite;
+    }
+    .btn-cta-green:disabled {
+      animation: none;
+      background: #94a3b8;
+      border-color: #e2e8f0;
+      color: #ffffff;
+    }
+    .btn-cta-green:disabled::after { display: none; }
+
+    .btn-cta-blue {
+      background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 55%, #1e40af 100%);
+      color: #ffffff;
+      border: 2.5px solid #ffffff;
+      animation: pulse-blue 1.9s ease-in-out infinite;
+    }
+    .arrow-bounce {
+      display: inline-block;
+      animation: arrow-nudge 1.05s ease-in-out infinite;
+    }
+
+    /* =====================================================================
+       1. 풀스크린 AR HUD 뷰 (라이트모드, 100dvh)
+       ===================================================================== */
+    #viewNav { position: relative; width: 100vw; height: 100dvh; overflow: hidden; background: #e0f2fe; }
+
+    .ar-grid-bg {
+      position: absolute; inset: 0; z-index: 0; overflow: hidden;
+      background: radial-gradient(circle at 50% 38%, rgba(56, 189, 248, 0.22), transparent 60%),
+                  linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 54%, #f8fafc 100%);
+    }
+    .ar-grid-floor {
+      position: absolute; left: 50%; top: 60%; width: 135vmin; height: 135vmin;
+      transform: translate(-50%, -50%) perspective(520px) rotateX(68deg);
+      border-radius: 50%; opacity: 0.85;
+      background: repeating-radial-gradient(circle, rgba(2, 132, 199, 0.16) 0 1.5px, transparent 1.5px 56px),
+                  linear-gradient(rgba(2, 132, 199, 0.14) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(2, 132, 199, 0.14) 1px, transparent 1px);
+      background-size: 100% 100%, 44px 44px, 44px 44px;
+    }
+
+    #arVideo {
+      position: absolute; inset: 0; z-index: 1;
+      width: 100%; height: 100%; object-fit: cover;
+      display: none; background: #cbd5e1;
+    }
+    #arVideo.active { display: block; }
+
+    #focusTapLayer { position: absolute; inset: 0; z-index: 3; }
+    .focus-ring {
+      position: fixed; width: 76px; height: 76px; margin: -38px 0 0 -38px;
+      border-radius: 50%; border: 3px solid #f59e0b;
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.78), inset 0 0 0 2px rgba(255, 255, 255, 0.8);
+      pointer-events: none; z-index: 26;
+      animation: focusPop 0.75s ease-out forwards;
+    }
+    @keyframes focusPop {
+      0% { transform: scale(1.35); opacity: 1; }
+      45% { transform: scale(0.92); opacity: 1; border-color: #10b981; }
+      100% { transform: scale(1.0); opacity: 0; border-color: #10b981; }
+    }
+
+    .ar-vignette {
+      position: absolute; inset: 0; z-index: 2; pointer-events: none;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.28) 0%, transparent 20%, transparent 76%, rgba(15, 23, 42, 0.16) 100%);
+    }
+
+    /* =====================================================================
+       상단 안내 HUD (바형 세로 스마트폰 AR 시야 극대화 비율)
+       ===================================================================== */
+    .hud-top {
+      position: absolute; top: calc(8px + var(--safe-top)); left: 10px; right: 10px; z-index: 30;
+      display: flex; flex-direction: column; gap: 7px;
+      padding: 11px 13px 10px; border-radius: 18px;
+      background: var(--glass);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1.5px solid #e2e8f0;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+    }
+    .hud-row-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .hud-info {
+      display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;
+      cursor: pointer; padding: 1px 2px; border-radius: 10px;
+    }
+    .hud-info:active { background: rgba(2, 132, 199, 0.08); }
+    .floor-badge {
+      flex-shrink: 0; min-width: 46px; height: 46px; padding: 0 7px;
+      border-radius: 13px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #0284c7, #059669);
+      color: #ffffff; font-weight: 900; font-size: 16.5px;
+      box-shadow: 0 5px 12px rgba(2, 132, 199, 0.28);
+      user-select: none; touch-action: manipulation; cursor: pointer;
+    }
+    .floor-badge:active { transform: scale(0.95); }
+    .hud-text { min-width: 0; flex: 1; }
+    .hud-instruction {
+      font-size: clamp(16.5px, 4.3vw, 22px);
+      font-weight: 800; color: #0f172a;
+      line-height: 1.25; word-break: keep-all;
+      letter-spacing: -0.02em;
+    }
+    .hud-meta {
+      display: flex; align-items: center; gap: 6px; margin-top: 3px;
+      font-size: clamp(12px, 3vw, 14px); color: #0284c7; font-weight: 700;
+      word-break: keep-all;
+    }
+
+    /* 지나치는 교실 순서 칩 */
+    .landmark-bar {
+      display: flex; align-items: center; gap: 5px;
+      overflow-x: auto; scrollbar-width: none; padding: 1px 0;
+    }
+    .landmark-bar::-webkit-scrollbar { display: none; }
+    .lm-chip {
+      flex-shrink: 0; padding: 4px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 800;
+      background: #f1f5f9; border: 1.5px solid #cbd5e1; color: #334155;
+    }
+    .lm-chip.cur { background: #e0f2fe; border-color: #38bdf8; color: #0369a1; }
+    .lm-chip.dest { background: #d1fae5; border-color: #10b981; color: #047857; }
+    .lm-sep { flex-shrink: 0; font-size: 11px; color: #94a3b8; font-weight: 900; }
+
+    /* 상단 하단줄: 핵심 버튼 2개 (음성 다시듣기, 다른 위치로 경로 탐색) */
+    .hud-row-tools {
+      display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+      padding-top: 6px; border-top: 1px solid #e2e8f0;
+    }
+    .calib-badge {
+      padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
+      background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; white-space: nowrap;
+    }
+    .calib-badge.auto { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+
+    .hud-actions { display: grid; grid-template-columns: auto 1fr; width: 100%; gap: 6px; }
+    .hud-chip-btn {
+      border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b;
+      height: 34px; padding: 0 11px; border-radius: 10px;
+      font-size: 12.5px; font-weight: 800; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+      transition: transform 0.1s ease, background 0.15s ease;
+      white-space: nowrap;
+    }
+    .hud-chip-btn:active { transform: scale(0.95); }
+    .hud-chip-btn.btn-route-emph {
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      border-color: #1d4ed8; color: #ffffff;
+      padding: 0 13px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.34);
+    }
+
+    /* 권한 진단 배너 */
+    .diag-banner {
+      position: absolute; top: var(--hud-bottom); left: 10px; right: 132px; z-index: 28;
+      display: none; align-items: flex-start; justify-content: space-between; gap: 8px;
+      padding: 9px 11px; border-radius: 13px; font-size: 12px; font-weight: 600;
+      background: #fef2f2; border: 1.5px solid #fca5a5; color: #991b1b;
+      box-shadow: var(--shadow-md);
+    }
+    .diag-banner.warn { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    .diag-banner.open { display: flex; }
+
+    /* 초기 AR 시작 오버레이 (경로 먼저 선택 우선 화면) */
+    .start-overlay {
+      position: fixed; inset: 0; z-index: 42;
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(14px + var(--safe-top)) 14px calc(18px + var(--safe-bottom));
+      overflow-y: auto;
+      background: rgba(241, 245, 249, 0.82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    .start-card {
+      width: min(94vw, 440px); max-height: calc(100dvh - 32px - var(--safe-top) - var(--safe-bottom));
+      overflow-y: auto; padding: 20px 18px; border-radius: 24px;
+      background: var(--glass-strong); border: 1.5px solid #cbd5e1;
+      box-shadow: var(--shadow-lg);
+      display: flex; flex-direction: column; gap: 12px; text-align: left;
+    }
+    .start-head {
+      display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+    }
+    .start-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 800;
+      background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
+    }
+    .start-qr-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800;
+      background: #d1fae5; color: #047857; border: 1px solid #6ee7b7;
+    }
+    .start-title {
+      font-size: 21px; font-weight: 900; color: #0f172a; letter-spacing: -0.02em;
+    }
+    .start-sub {
+      font-size: 12.5px; font-weight: 600; color: #475569;
+    }
+    .start-sel-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end;
+    }
+    .btn-swap-mini {
+      min-height: 46px; min-width: 46px; padding: 0; font-size: 17px; border-radius: 12px;
+      background: #f8fafc; border: 1.5px solid #cbd5e1; color: #1e293b;
+    }
+    .start-route-box {
+      background: #eff6ff; border: 1.5px solid #bfdbfe;
+      border-radius: 15px; padding: 11px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+    }
+    .start-route-label { font-size: 11.5px; font-weight: 800; color: #2563eb; }
+    .start-route-text { font-size: 15.5px; font-weight: 900; color: #0f172a; word-break: keep-all; }
+    .btn-ar-launch {
+      width: 100%; min-height: 54px; font-size: 15.5px; font-weight: 900; border-radius: 16px;
+    }
+
+    /* =====================================================================
+       중앙 AR 스테이지 (상단 HUD ~ 하단 컨트롤 사이의 정중앙 정렬)
+       ===================================================================== */
+    .ar-stage-center {
+      position: absolute; left: 0; right: 0;
+      top: var(--hud-bottom); bottom: var(--ctrl-bottom);
+      z-index: 10; pointer-events: none;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 4px 14px;
+    }
+    .ar-arrow-frame {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: visible;
+      animation: arrowFloat 2.1s ease-in-out infinite;
+    }
+    @keyframes arrowFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    #arArrowSvg {
+      width: clamp(146px, 38vw, 208px);
+      height: clamp(146px, 38vw, 208px);
+      transform: perspective(640px) rotateX(56deg) rotateZ(0deg);
+      transform-origin: center center;
+      filter: drop-shadow(0 16px 20px rgba(15, 23, 42, 0.42)) drop-shadow(0 0 14px rgba(37, 99, 235, 0.45));
+      will-change: transform;
+    }
+    .chevron-pulse { animation: chevronGlow 1.3s ease-in-out infinite; }
+    @keyframes chevronGlow { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+    /* 도착/층간이동 팝업 (화면 정중앙 배치 수정 완료) */
+    .ar-special-box {
+      display: none; flex-direction: column; align-items: center; gap: 6px;
+      position: relative; z-index: 2;
+      width: min(86vw, 310px); max-width: calc(100vw - 28px);
+      margin: 0 auto;
+      padding: 18px 22px; border-radius: 22px;
+      background: rgba(255, 255, 255, 0.96); border: 2.5px solid #f59e0b;
+      box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24); text-align: center;
+    }
+    .ar-special-box.arrived {
+      border-color: #10b981;
+      animation: arrivalCardPop 0.58s cubic-bezier(0.22, 1.35, 0.36, 1) forwards;
+    }
+    .ar-special-box.arrived::before,
+    .ar-special-box.arrived::after {
+      content: "";
+      position: absolute; inset: -10px; border-radius: 28px;
+      border: 3px solid rgba(16, 185, 129, 0.72);
+      pointer-events: none; z-index: -1;
+      animation: arrivalPulseRing 1.8s ease-out infinite;
+    }
+    .ar-special-box.arrived::after { animation-delay: 0.9s; }
+    .ar-special-box.ev { border-color: #0284c7; }
+    .ar-special-box.err { border-color: #ef4444; }
+    .ar-sp-icon { font-size: 40px; line-height: 1; }
+    .ar-special-box.arrived .ar-sp-icon { animation: arrivalIconBounce 1.2s ease-in-out infinite; }
+    .ar-sp-title {
+      font-size: clamp(16px, 4.3vw, 20px); font-weight: 900; color: #0f172a;
+      word-break: keep-all;
+    }
+    .ar-sp-sub {
+      font-size: clamp(12px, 3.2vw, 13.5px); color: #475569; font-weight: 700;
+      word-break: keep-all;
+    }
+
+    @keyframes arrivalCardPop {
+      0% { transform: scale(0.55); opacity: 0; }
+      65% { transform: scale(1.07); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes arrivalPulseRing {
+      0% { transform: scale(0.96); opacity: 0.9; }
+      100% { transform: scale(1.36); opacity: 0; }
+    }
+    @keyframes arrivalIconBounce {
+      0%, 100% { transform: translateY(0) scale(1); }
+      45% { transform: translateY(-7px) scale(1.12); }
+    }
+
+    #confettiCanvas {
+      position: fixed; inset: 0; width: 100vw; height: 100dvh;
+      pointer-events: none; z-index: 12; display: none;
+    }
+    #confettiCanvas.active { display: block; }
+
+    /* AR 중앙 화살표 아래 고대비 흰색 알약 방향 배지 */
+    .ar-guide-pill {
+      margin-top: 12px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      padding: 9px 20px; border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 2.5px solid #2563eb;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+      max-width: 92vw;
+    }
+    .ar-dir-tag {
+      font-size: 15.5px; font-weight: 900; color: #059669; white-space: nowrap;
+    }
+    .ar-target-tag {
+      font-size: 15px; font-weight: 800; color: #0f172a;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* 좌측 하단 엄지 컨트롤 스택 */
+    .hud-bottom-left {
+      position: fixed;
+      bottom: calc(14px + var(--safe-bottom));
+      left: 14px;
+      z-index: 30;
+      width: min(350px, calc(100vw - 28px));
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .next-step-hint {
+      position: relative;
+      padding: 9px 12px; border-radius: 13px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 2px solid #10b981;
+      color: #065f46;
+      font-size: 12px; font-weight: 800; line-height: 1.38;
+      text-align: center;
+      word-break: keep-all;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+      animation: hint-bob 2.1s ease-in-out infinite;
+    }
+    .next-step-hint::after {
+      content: "";
+      position: absolute; bottom: -8px; left: 26px;
+      width: 13px; height: 13px;
+      background: rgba(255, 255, 255, 0.96);
+      border-right: 2px solid #10b981;
+      border-bottom: 2px solid #10b981;
+      transform: rotate(45deg);
+    }
+
+    .step-nav-row { display: flex; gap: 7px; width: 100%; }
+    .btn-prev-step {
+      flex-shrink: 0; min-width: 50px; min-height: 52px; padding: 8px;
+      background: rgba(255, 255, 255, 0.94); border-color: #cbd5e1; color: #334155;
+      font-size: 15px; border-radius: 14px;
+    }
+    .btn-next-main {
+      flex: 1; min-width: 0; min-height: 52px;
+      font-size: 15.5px; font-weight: 900; border-radius: 15px;
+      letter-spacing: -0.01em;
+    }
+    #btnNextLabel { overflow: hidden; text-overflow: ellipsis; }
+
+    .thumb-sub-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+    .thumb-sub-row .btn { min-height: 40px; padding: 6px 10px; font-size: 13px; }
+
+    /* 수동 시선 테스트 패널 */
+    .test-pop {
+      display: none; flex-direction: column; gap: 7px;
+      padding: 10px 12px; border-radius: 14px;
+      background: var(--glass-strong); border: 1.5px solid #bae6fd;
+      box-shadow: var(--shadow-md);
+    }
+    .test-pop.open { display: flex; }
+    .test-pop input[type="range"] { width: 100%; accent-color: #2563eb; height: 22px; cursor: pointer; }
+
+    /* =====================================================================
+       2. 우측 상단 화이트 SVG 플로팅 미니맵
+       ===================================================================== */
+    .minimap-backdrop {
+      position: fixed; inset: 0; z-index: 44;
+      background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    }
+    .minimap-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    .minimap-widget {
+      position: fixed;
+      top: var(--hud-bottom);
+      right: 12px;
+      z-index: 35;
+      width: 140px; height: 140px;
+      border-radius: 18px; overflow: hidden;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 2px solid #cbd5e1;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+      transition: width 0.22s ease, height 0.22s ease, top 0.22s ease, right 0.22s ease;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .minimap-widget.expanded {
+      z-index: 45;
+      top: calc(18px + var(--safe-top));
+      right: max(4vw, calc(50vw - 410px));
+      width: min(92vw, 820px);
+      height: min(58vh, 470px);
+      border-radius: 22px;
+      border: 2px solid #38bdf8;
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+    }
+    #minimapSvg { display: block; width: 100%; height: 100%; }
+
+    .mini-top-left { position: absolute; top: 6px; left: 6px; z-index: 5; display: flex; align-items: center; gap: 4px; }
+    .mini-chip {
+      padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+      background: rgba(255, 255, 255, 0.95); border: 1px solid #cbd5e1; color: #0f172a;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+      pointer-events: none;
+    }
+    .mini-floor-tabs {
+      display: none; gap: 3px; background: rgba(241, 245, 249, 0.96);
+      padding: 3px; border-radius: 11px; border: 1px solid #cbd5e1;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    }
+    .minimap-widget.expanded .mini-chip { display: none; }
+    .minimap-widget.expanded .mini-floor-tabs { display: inline-flex; }
+    .mf-tab {
+      border: none; background: transparent; color: #475569;
+      padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 800; cursor: pointer;
+    }
+    .mf-tab.active { background: #2563eb; color: #ffffff; }
+    .mf-tab.has-route { color: #059669; }
+    .mf-tab.active.has-route { color: #ffffff; }
+
+    .mini-controls { position: absolute; top: 5px; right: 5px; z-index: 5; display: flex; gap: 4px; }
+    .mini-btn {
+      width: 28px; height: 28px; border-radius: 8px;
+      border: 1px solid #cbd5e1; background: rgba(255, 255, 255, 0.95); color: #1e293b;
+      font-size: 13px; display: grid; place-items: center; cursor: pointer;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+    }
+    .mini-btn.active { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+    .minimap-widget.expanded .mini-btn { width: 36px; height: 36px; font-size: 16px; border-radius: 10px; }
+
+    .mini-bottom-bar {
+      position: absolute; left: 7px; right: 7px; bottom: 5px; z-index: 4; pointer-events: none;
+      display: flex; justify-content: space-between; font-size: 10px; font-weight: 800;
+      color: #334155;
+      text-shadow: 0 1px 2px rgba(255, 255, 255, 0.95);
+    }
+
+    /* =====================================================================
+       3. 경로 선택 바텀시트 (라이트모드)
+       ===================================================================== */
+    .sheet-bg {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px);
+      display: none; align-items: flex-end; justify-content: center;
+    }
+    .sheet-bg.open { display: flex; }
+    .sheet {
+      width: min(100vw, 520px); max-height: 88dvh; overflow-y: auto;
+      background: #ffffff; border: 1.5px solid #e2e8f0;
+      border-bottom: none; border-radius: 24px 24px 0 0;
+      padding: 14px 18px calc(20px + var(--safe-bottom));
+      box-shadow: 0 -12px 36px rgba(15, 23, 42, 0.18);
+      display: flex; flex-direction: column; gap: 13px;
+    }
+    .sheet-handle { width: 44px; height: 5px; border-radius: 99px; background: #cbd5e1; margin: 0 auto -2px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .label { font-size: 12.5px; font-weight: 800; color: #475569; }
+    select, input[type="text"], input[type="search"], input[type="number"], input[type="password"] {
+      width: 100%; background: #f8fafc; border: 1.5px solid #cbd5e1; color: #0f172a;
+      border-radius: 12px; padding: 10px 12px; font-size: 14.5px; font-weight: 600; min-height: 46px; outline: none;
+    }
+    select:focus, input:focus { border-color: #2563eb; background: #ffffff; }
+    .pref-group {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;
+      background: #f1f5f9; padding: 4px; border-radius: 13px; border: 1px solid #e2e8f0;
+    }
+    .pref-btn {
+      border: none; background: transparent; color: #475569;
+      padding: 9px 6px; border-radius: 9px; font-size: 13px; font-weight: 800; cursor: pointer;
+    }
+    .pref-btn.active { background: #2563eb; color: #ffffff; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25); }
+
+    /* =====================================================================
+       4. 본관 도면 편집기 & 건물 북쪽 보정 뷰 (라이트모드)
+       ===================================================================== */
+    #viewEditor { width: 100%; min-height: 100dvh; background: #f1f5f9; padding-bottom: 44px; }
+    .ed-header {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px);
+      border-bottom: 1px solid #e2e8f0;
+      padding: calc(10px + var(--safe-top)) 14px 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+    .ed-wrap { width: 100%; max-width: 980px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 13px; }
+    .ed-card {
+      background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px;
+      padding: 15px; display: flex; flex-direction: column; gap: 11px;
+      box-shadow: var(--shadow-sm);
+    }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .row-between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 440px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .pills { display: inline-flex; flex-wrap: wrap; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .pill {
+      border: none; background: transparent; color: #475569;
+      padding: 7px 13px; border-radius: 9px; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 36px;
+    }
+    .pill.active { background: #2563eb; color: #ffffff; }
+    .pill.active-green { background: #059669; color: #ffffff; }
+
+    .ed-svg-box {
+      position: relative; width: 100%; aspect-ratio: 2 / 1;
+      background: #f8fafc; border-radius: 14px; overflow: hidden; border: 1.5px solid #cbd5e1;
+    }
+    #editorSvg { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+    .ed-hint { font-size: 12.5px; font-weight: 600; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 9px 11px; border-radius: 10px; }
+    .inline-panel {
+      display: none; flex-direction: column; gap: 10px; padding: 13px;
+      border-radius: 14px; background: #f8fafc; border: 1.5px solid #38bdf8;
+    }
+    .inline-panel.open { display: flex; }
+    .qr-input { flex: 1; min-width: 170px; font-family: ui-monospace, monospace; font-size: 12px; background: #ffffff; color: #0369a1; }
+
+    /* 토스트 & 커스텀 확인 모달 */
+    .toasts {
+      position: fixed; top: var(--hud-bottom); left: 50%; transform: translateX(-50%); z-index: 120;
+      display: flex; flex-direction: column; gap: 6px; width: min(90vw, 390px); pointer-events: none;
+    }
+    .toast {
+      background: rgba(255, 255, 255, 0.97); border: 2px solid #2563eb; color: #0f172a;
+      padding: 11px 15px; border-radius: 14px; font-size: 13px; font-weight: 800; text-align: center;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+    }
+    .toast.ok { border-color: #10b981; color: #065f46; background: #ecfdf5; }
+    .toast.warn { border-color: #f59e0b; color: #92400e; background: #fffbeb; }
+    .toast.err { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
+
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.48); z-index: 150;
+      display: none; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      width: min(100%, 365px); background: #ffffff; border: 1.5px solid #e2e8f0;
+      border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px;
+      box-shadow: var(--shadow-lg);
+    }
+    .admin-err {
+      display: none; font-size: 12.5px; font-weight: 700;
+      color: var(--red); background: var(--red-bg);
+      border: 1px solid #fca5a5; border-radius: 10px; padding: 8px 10px;
+    }
+    .admin-err.open { display: block; }
+
+    /* =====================================================================
+       바형 스마트폰 세로 화면 최적화 (갤럭시 S25+ 등 폭 520px 이하 기준)
+       ===================================================================== */
+    @media (max-width: 520px) {
+      .hud-top {
+        top: calc(6px + var(--safe-top)); left: 8px; right: 8px;
+        padding: 9px 11px 8px; gap: 6px; border-radius: 16px;
+      }
+      .floor-badge {
+        min-width: 40px; height: 40px; border-radius: 11px; font-size: 15px;
+      }
+      .hud-instruction {
+        font-size: clamp(15px, 4.1vw, 18.5px); line-height: 1.24;
+      }
+      .hud-meta { font-size: 11.5px; margin-top: 2px; }
+      .landmark-bar { gap: 4px; padding: 0; }
+      .lm-chip { padding: 3px 8px; font-size: 11px; }
+      .hud-row-tools {
+        padding-top: 5px;
+      }
+      .hud-actions {
+        display: grid; grid-template-columns: auto 1fr; width: 100%;
+        gap: 6px;
+      }
+      .hud-chip-btn { height: 34px; padding: 0 10px; font-size: 12px; }
+      .hud-chip-btn.btn-route-emph { padding: 0 10px; }
+
+      .minimap-widget {
+        width: 112px; height: 112px; right: 8px; border-radius: 15px;
+      }
+      .minimap-widget:not(.expanded) .mini-chip { font-size: 9.5px; padding: 2px 6px; }
+      .minimap-widget:not(.expanded) .mini-btn { width: 24px; height: 24px; font-size: 11.5px; border-radius: 7px; }
+      .minimap-widget:not(.expanded) .mini-bottom-bar { font-size: 9px; left: 5px; right: 5px; bottom: 4px; }
+      .diag-banner { left: 8px; right: 126px; }
+
+      #arArrowSvg {
+        width: clamp(128px, 34vw, 168px);
+        height: clamp(128px, 34vw, 168px);
+      }
+      .ar-guide-pill { margin-top: 8px; padding: 7px 16px; gap: 7px; }
+      .ar-dir-tag { font-size: 14px; }
+      .ar-target-tag { font-size: 13.5px; }
+      .ar-special-box { padding: 15px 18px; border-radius: 18px; }
+      .ar-sp-icon { font-size: 36px; }
+
+      .hud-bottom-left {
+        bottom: calc(10px + var(--safe-bottom));
+        left: 10px; width: calc(100vw - 20px); gap: 6px;
+      }
+      .next-step-hint {
+        padding: 7px 11px; font-size: 11.5px; line-height: 1.35; border-radius: 12px;
+      }
+      .btn-prev-step { min-width: 46px; min-height: 46px; border-radius: 13px; }
+      .btn-next-main { min-height: 46px; font-size: 14.5px; padding: 8px 10px; border-radius: 13px; }
+      .thumb-sub-row .btn { min-height: 36px; font-size: 12px; padding: 5px 8px; border-radius: 11px; }
+    }
+  </style>
+</head>
+<body class="mode-nav">
+  <!-- ===================================================================
+       VIEW 1: 풀스크린 AR HUD (김천다수초등학교 본관 1~3층, 라이트모드)
+       =================================================================== -->
+  <section id="viewNav" aria-label="김천다수초등학교 본관 AR 길안내">
+    <div class="ar-grid-bg"><div class="ar-grid-floor"></div></div>
+    <video id="arVideo" autoplay playsinline muted></video>
+    <div class="ar-vignette"></div>
+    <div id="focusTapLayer" aria-label="카메라 화면 터치로 재초점"></div>
+    <canvas id="confettiCanvas" aria-hidden="true"></canvas>
+
+    <!-- 상단 안내 HUD 카드 (바형 세로 최적화) -->
+    <header id="hudTop" class="hud-top">
+      <div class="hud-row-main">
+        <div id="hudRouteTrigger" class="hud-info" role="button" tabindex="0" title="눌러서 출발지/목적지 변경">
+          <div id="hudFloorBadge" class="floor-badge" title="현재 층">1F</div>
+          <div class="hud-text">
+            <div id="hudInstruction" class="hud-instruction">경로 안내 준비 중...</div>
+            <div class="hud-meta">
+              <span id="hudRouteSummary">1F 중앙현관 → 1F 행정실</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 지나치는 교실 순서 칩 -->
+      <div id="landmarkBar" class="landmark-bar" aria-label="지나치는 교실 순서"></div>
+
+      <!-- 핵심 도구 버튼 2개 (편집은 1F 배지 5연타 이스터에그) -->
+      <div class="hud-row-tools">
+        <div class="hud-actions">
+          <button id="btnRepeatTts" type="button" class="hud-chip-btn" title="현재 안내 음성 다시 듣기">🔁 음성안내 다시듣기</button>
+          <button id="btnOpenRouteTop" type="button" class="hud-chip-btn btn-route-emph" title="출발지 및 목적지 선택">📍 다른 위치로 경로 탐색</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 권한 진단 배너 -->
+    <div id="diagBanner" class="diag-banner" role="alert">
+      <div id="diagText" style="flex:1;"></div>
+      <div class="row" style="gap:4px; flex-shrink:0;">
+        <button id="btnRetryPerm" type="button" class="btn btn-sm" style="min-height:28px; padding:2px 8px; font-size:11.5px;">다시시도</button>
+        <button id="btnCloseDiag" type="button" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer;font-weight:900; padding:0 4px;">✕</button>
+      </div>
+    </div>
+
+    <!-- 초기 AR 시작 오버레이 (경로 먼저 선택 우선 화면) -->
+    <div id="startOverlay" class="start-overlay">
+      <div class="start-card">
+        <div class="start-head">
+          <span class="start-badge">🏫 김천다수초등학교 본관 (1F ~ 3F)</span>
+          <span id="startQrBadge" class="start-qr-badge hidden">✅ QR 출발지 자동 인식됨</span>
+          <div class="start-title">어디로 이동하시나요?</div>
+          <div class="start-sub">출발지와 목적지를 먼저 선택한 뒤 AR 길안내를 시작하세요.</div>
+        </div>
+
+        <div class="start-sel-row">
+          <div class="field">
+            <label class="label" for="overlayStartSel">📍 출발지 (현재 위치)</label>
+            <select id="overlayStartSel"></select>
+          </div>
+          <button id="btnOverlaySwap" type="button" class="btn btn-swap-mini" title="출발지/목적지 맞바꾸기">⇅</button>
+        </div>
+
+        <div class="field">
+          <label class="label" for="overlayDestSel">🏁 목적지 (가고 싶은 곳)</label>
+          <select id="overlayDestSel"></select>
+        </div>
+
+        <div class="field">
+          <span class="label">🪜 층간 이동 선호</span>
+          <div class="pref-group">
+            <button type="button" class="pref-btn active" data-overlay-pref="stairs">계단 우선</button>
+            <button type="button" class="pref-btn" data-overlay-pref="elevator">엘리베이터 우선</button>
+          </div>
+        </div>
+
+        <div class="start-route-box">
+          <span class="start-route-label">선택된 안내 경로</span>
+          <div id="overlayRouteText" class="start-route-text">1층 중앙현관 → 1층 행정실</div>
+        </div>
+
+        <button id="btnLaunchAR" type="button" class="btn btn-cta-blue btn-shimmer btn-ar-launch">
+          📷 1F 행정실로 AR 길안내 시작
+        </button>
+      </div>
+    </div>
+
+    <!-- 중앙 대형 3D 원근 AR 화살표 + 정중앙 팝업 + 방향/목적지 고대비 흰색 알약 배지 -->
+    <div class="ar-stage-center">
+      <div id="arArrowFrame" class="ar-arrow-frame">
+        <svg id="arArrowSvg" viewBox="0 0 200 200" aria-label="AR 방향 화살표">
+          <defs>
+            <linearGradient id="arrowGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#10b981" />
+              <stop offset="50%" stop-color="#0ea5e9" />
+              <stop offset="100%" stop-color="#2563eb" />
+            </linearGradient>
+          </defs>
+          <polygon points="100,26 176,112 132,112 132,188 68,188 68,112 24,112" fill="rgba(30, 58, 138, 0.36)" transform="translate(0, 9)" />
+          <polygon points="100,14 176,104 132,104 132,180 68,180 68,104 24,104" fill="url(#arrowGrad)" stroke="#ffffff" stroke-width="6.5" stroke-linejoin="round" />
+          <polyline class="chevron-pulse" points="72,88 100,56 128,88" fill="none" stroke="#ffffff" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" />
+          <polyline class="chevron-pulse" points="78,136 100,110 122,136" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+
+      <div id="arSpecialBox" class="ar-special-box">
+        <div id="arSpIcon" class="ar-sp-icon">⬆️</div>
+        <div id="arSpTitle" class="ar-sp-title">2층으로 이동</div>
+        <div id="arSpSub" class="ar-sp-sub">도착 후 아래 초록색 버튼을 눌러주세요</div>
+      </div>
+
+      <div class="ar-guide-pill">
+        <span id="arDirTag" class="ar-dir-tag">직진</span>
+        <span id="arTargetTag" class="ar-target-tag">행정실 (왼쪽)</span>
+      </div>
+    </div>
+
+    <!-- 좌측 하단 엄지 컨트롤 (도착 유도 말풍선 + 강조 초록 버튼 + 보조 버튼) -->
+    <div id="hudBottomLeft" class="hud-bottom-left">
+      <div id="testPop" class="test-pop">
+        <div class="row-between" style="font-size:12px; color:#334155; font-weight:700;">
+          <span>수동 시선 테스트 (<b id="manualDegText" style="color:#2563eb;">180°</b>)</span>
+          <button id="btnUseAutoCompass" type="button" class="btn btn-sm" style="min-height:30px; padding:3px 9px; font-size:11.5px;">자동나침반 복귀</button>
+        </div>
+        <input type="range" id="headingSlider" min="0" max="359" value="180" />
+      </div>
+
+      <div id="nextStepHint" class="next-step-hint" role="status">
+        👇 행정실에 도착하셨다면 아래 초록색 버튼을 눌러<br>다음 안내를 시작하세요!
+      </div>
+
+      <div class="step-nav-row">
+        <button id="btnPrevStep" type="button" class="btn btn-prev-step hidden" title="이전 단계">◀</button>
+        <button id="btnNextStep" type="button" class="btn btn-cta-green btn-shimmer btn-next-main">
+          <span id="btnNextLabel">다음 안내 시작</span>
+          <span id="btnNextArrow" class="arrow-bounce">▶</span>
+        </button>
+      </div>
+
+      <div class="thumb-sub-row">
+        <button id="btnCalibrate" type="button" class="btn btn-amber-soft">🎯 정면 맞춤</button>
+        <button id="btnTestToggle" type="button" class="btn">🧭 테스트</button>
+      </div>
+    </div>
+
+    <!-- 우측 상단 화이트 SVG 플로팅 미니맵 -->
+    <div id="minimapBackdrop" class="minimap-backdrop"></div>
+    <div id="minimapWidget" class="minimap-widget" role="region" aria-label="본관 플로팅 미니맵">
+      <svg id="minimapSvg" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="mini-top-left">
+        <span id="miniFloorChip" class="mini-chip">1F 본관</span>
+        <div id="miniFloorTabs" class="mini-floor-tabs">
+          <button type="button" class="mf-tab active" data-mfloor="1">1F</button>
+          <button type="button" class="mf-tab" data-mfloor="2">2F</button>
+          <button type="button" class="mf-tab" data-mfloor="3">3F</button>
+        </div>
+      </div>
+      <div class="mini-controls">
+        <button id="btnMiniRotate" type="button" class="mini-btn active" title="헤딩업 / 북쪽고정 전환">🧭</button>
+        <button id="btnMiniExpand" type="button" class="mini-btn" title="확대/축소">⤢</button>
+      </div>
+      <div class="mini-bottom-bar">
+        <span id="miniModeLabel">헤딩업</span>
+        <span id="miniExpandHint">탭 확대</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       경로 선택 바텀시트 (주행 중 경로 재탐색)
+       =================================================================== -->
+  <div id="routeSheetBg" class="sheet-bg" role="dialog" aria-modal="true" aria-label="본관 경로 선택">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="row-between">
+        <strong style="font-size:17px; color:#0f172a;">📍 본관 경로 설정</strong>
+        <button id="btnCloseRoute" type="button" class="btn btn-sm">닫기</button>
+      </div>
+
+      <div class="field">
+        <label class="label" for="destSearch">목적지 빠른 검색</label>
+        <input type="search" id="destSearch" placeholder="예: 행정실, 3-1, 도서관, 과학실, 화장실..." />
+      </div>
+
+      <div class="field">
+        <label class="label" for="startSel">출발지 (현재 위치)</label>
+        <select id="startSel"></select>
+      </div>
+
+      <div class="field">
+        <label class="label" for="destSel">목적지 (본관 1~3층)</label>
+        <select id="destSel"></select>
+      </div>
+
+      <div class="field">
+        <span class="label">층간 이동 선호</span>
+        <div class="pref-group">
+          <button type="button" class="pref-btn active" data-pref="stairs">계단 우선</button>
+          <button type="button" class="pref-btn" data-pref="elevator">엘리베이터 우선</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="btnSwapRoute" type="button" class="btn btn-sm">⇅ 바꾸기</button>
+        <button id="btnApplyRoute" type="button" class="btn btn-cta-blue btn-shimmer" style="flex:1; min-height:48px; font-size:15px;">이 경로로 AR 안내 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       VIEW 2: 본관 도면 편집기 & 건물 북쪽(영점) 보정 설정
+       =================================================================== -->
+  <section id="viewEditor" class="hidden" aria-label="본관 도면 편집기">
+    <header class="ed-header">
+      <div>
+        <div style="font-size:16px; font-weight:900; color:#0f172a;">🗺️ 김천다수초 본관 도면 편집기</div>
+        <div style="font-size:12px; color:#64748b; font-weight:600;">1~3층 도면 편집 · 자동 나침반 북쪽 기준 보정 · QR URL · JSON 백업</div>
+      </div>
+      <button id="btnBackToAR" type="button" class="btn btn-blue btn-sm">◀ AR 길안내</button>
+    </header>
+
+    <div class="ed-wrap">
+      <div class="ed-card">
+        <div class="row-between">
+          <div>
+            <strong style="font-size:14.5px; color:#047857;">🧭 자동 나침반 영점 설정 (건물 도면 북쪽 기준)</strong>
+            <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
+              복도에서 도면 위쪽(1층 행정실·교무실 방향)을 정면으로 바라보고 버튼을 누르면 실제 진북과의 각도 차이를 저장합니다.
+            </div>
+          </div>
+          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">오프셋: 0°</span>
+        </div>
+        <div class="row">
+          <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
+          <button id="btnResetNorthOffset" type="button" class="btn btn-sm">0° 초기화</button>
+          <span id="liveCompassText" style="font-size:12.5px; color:#0284c7; font-weight:800;">실시간 나침반: 대기 중</span>
+        </div>
+      </div>
+
+      <div class="ed-card">
+        <div class="row-between">
+          <div class="pills">
+            <button type="button" class="pill active" data-efloor="1">1층</button>
+            <button type="button" class="pill" data-efloor="2">2층</button>
+            <button type="button" class="pill" data-efloor="3">3층</button>
+          </div>
+          <div class="row">
+            <label for="imgInput" class="btn btn-sky btn-sm" style="cursor:pointer;">🖼️ 도면 사진 올리기</label>
+            <input type="file" id="imgInput" accept="image/*" class="hidden" />
+            <button id="btnClearImg" type="button" class="btn btn-sm">사진 제거</button>
+          </div>
+        </div>
+
+        <div class="row-between">
+          <div class="pills">
+            <button type="button" class="pill active" data-tool="select">👆 선택/수정</button>
+            <button type="button" class="pill" data-tool="add">＋ 노드 추가</button>
+            <button type="button" class="pill" data-tool="connect">🔗 경로 연결</button>
+          </div>
+          <span id="edFloorTag" style="font-size:12.5px; color:#0284c7; font-weight:800;">1층 본관 (SVG 1000×500)</span>
+        </div>
+
+        <div id="edHint" class="ed-hint">지점을 클릭하면 이름/유형 수정, 벽면 부착용 QR 링크 복사, 삭제가 가능합니다.</div>
+
+        <div class="ed-svg-box">
+          <svg id="editorSvg" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+
+        <div id="inspectPanel" class="inline-panel">
+          <div class="row-between">
+            <strong id="inspectTitle" style="font-size:14px; color:#0284c7;">지점 정보</strong>
+            <button id="btnDelNode" type="button" class="btn btn-red btn-sm">🗑 삭제</button>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="label" for="editNameIn">지점 이름</label>
+              <input type="text" id="editNameIn" maxlength="24" />
+            </div>
+            <div class="field">
+              <label class="label" for="editTypeIn">유형</label>
+              <select id="editTypeIn">
+                <option value="classroom">교실</option>
+                <option value="office">행정/교무/연구실</option>
+                <option value="special">특별실/식당</option>
+                <option value="restroom">화장실</option>
+                <option value="stairs">계단</option>
+                <option value="elevator">엘리베이터(E/V)</option>
+                <option value="entrance">출입구/현관</option>
+                <option value="outdoor">야외(놀이데크/라온마당)</option>
+                <option value="waypoint">복도 경유점</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="qrUrlIn">QR 벽면 부착용 URL (?start=노드ID)</label>
+            <div class="row">
+              <input type="text" id="qrUrlIn" class="qr-input" readonly />
+              <button id="btnCopyQr" type="button" class="btn btn-sky btn-sm">URL 복사</button>
+              <button id="btnSaveEdit" type="button" class="btn btn-green btn-sm">저장</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="addPanel" class="inline-panel">
+          <strong style="font-size:13.5px; color:#059669;">＋ 새 지점 추가</strong>
+          <div class="grid-2">
+            <div class="field">
+              <label class="label" for="newNameIn">지점 이름</label>
+              <input type="text" id="newNameIn" placeholder="예: 3-2, 음악실" maxlength="24" />
+            </div>
+            <div class="field">
+              <label class="label" for="newTypeIn">유형</label>
+              <select id="newTypeIn">
+                <option value="classroom">교실</option>
+                <option value="office">행정/교무/연구실</option>
+                <option value="special">특별실/식당</option>
+                <option value="restroom">화장실</option>
+                <option value="stairs">계단</option>
+                <option value="elevator">엘리베이터(E/V)</option>
+                <option value="entrance">출입구/현관</option>
+                <option value="outdoor">야외 공간</option>
+                <option value="waypoint">복도 경유점</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="justify-content:flex-end;">
+            <button id="btnCancelAdd" type="button" class="btn btn-sm">취소</button>
+            <button id="btnCommitAdd" type="button" class="btn btn-green btn-sm">추가</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ed-card">
+        <div class="row-between">
+          <strong style="font-size:14.5px; color:#0f172a;">💾 데이터 백업 (자동 저장: dasu_ar_main_v6)</strong>
+          <div class="row">
+            <button id="btnExport" type="button" class="btn btn-sm">⬇ JSON 내보내기</button>
+            <label for="jsonIn" class="btn btn-sm" style="cursor:pointer;">⬆ JSON 불러오기</label>
+            <input type="file" id="jsonIn" accept=".json,application/json" class="hidden" />
+            <button id="btnReset" type="button" class="btn btn-red btn-sm">↺ 기본 본관 도면 복원</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 토스트 & 커스텀 확인 모달 -->
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="modalBg" class="modal-bg" role="dialog" aria-modal="true">
+    <div class="modal">
+      <strong id="modalTitle" style="font-size:16.5px; color:#0f172a;">확인</strong>
+      <p id="modalDesc" style="font-size:13.5px; color:#475569;"></p>
+      <div class="row" style="justify-content:flex-end;">
+        <button id="btnModalNo" type="button" class="btn btn-sm">취소</button>
+        <button id="btnModalYes" type="button" class="btn btn-red btn-sm">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 개발자 전용 편집기 로그인 모달 (층 배지 5연타로 진입) -->
+  <div id="adminModalBg" class="modal-bg" role="dialog" aria-modal="true" aria-label="개발자 로그인">
+    <form id="adminLoginForm" class="modal" autocomplete="off">
+      <strong style="font-size:16.5px; color:#0f172a;">🔒 개발자 전용 로그인</strong>
+      <p style="font-size:13px; color:#475569;">도면 편집 모드는 관리자 인증 후 이용할 수 있습니다.</p>
+      <div class="field">
+        <label class="label" for="adminIdIn">아이디</label>
+        <input type="text" id="adminIdIn" placeholder="관리자 아이디 입력" required />
+      </div>
+      <div class="field">
+        <label class="label" for="adminPwIn">비밀번호</label>
+        <input type="password" id="adminPwIn" placeholder="비밀번호 입력" required />
+      </div>
+      <div id="adminErrMsg" class="admin-err">아이디 또는 비밀번호가 올바르지 않습니다.</div>
+      <div class="row" style="justify-content:flex-end;">
+        <button type="button" id="btnAdminCancel" class="btn btn-sm">취소</button>
+        <button type="submit" id="btnAdminSubmit" class="btn btn-blue btn-sm">로그인</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'dasu_ar_main_v6';
+      const ADMIN_ID = 'admin';
+      const ADMIN_PW = 'dasu1234';
+      const STRAIGHT_TOLERANCE_DEG = 35; // 물결 복도 대응 직진 관용 구간 (±35°)
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const MAP_W = 1000;
+      const MAP_H = 500;
+      const CORRIDOR_Y = 250;
+      // 네이버 클로바 보이스(CLOVA Voice) Netlify Function 프록시 설정
+      // netlify/functions/clova-tts.js 배포 시 자동 사용, 미배포 시 내장 한국어 TTS로 자동 폴백
+      const CLOVA_TTS_URL = '/.netlify/functions/clova-tts';
+      const CLOVA_SPEAKER = 'nara';
+
+      /* =====================================================================
+         1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
+         ===================================================================== */
+      const FLOOR_PLANS = {
+        1: {
+          corridors: [
+            { x: 55,  y: 225, w: 915, h: 50 },
+            { x: 405, y: 95,  w: 100, h: 130 },
+            { x: 405, y: 275, w: 100, h: 155 }
+          ],
+          rooms: [
+            { x: 60,  y: 95,  w: 60,  h: 130, label: '서쪽계단', kind: 'stairs' },
+            { x: 120, y: 95,  w: 60,  h: 130, label: '숙직실',   kind: 'office' },
+            { x: 180, y: 95,  w: 70,  h: 130, label: '문서실',   kind: 'office' },
+            { x: 250, y: 95,  w: 155, h: 130, label: '회의실',   kind: 'special' },
+            { x: 505, y: 95,  w: 100, h: 130, label: '행정실',   kind: 'office' },
+            { x: 605, y: 95,  w: 85,  h: 130, label: '방송실',   kind: 'special' },
+            { x: 690, y: 95,  w: 105, h: 130, label: '교무실',   kind: 'office' },
+            { x: 795, y: 95,  w: 105, h: 130, label: '교장실',   kind: 'office' },
+            { x: 900, y: 170, w: 70,  h: 105, label: '동측출입구', kind: 'entrance' },
+            { x: 55,  y: 275, w: 135, h: 150, label: '조리실',   kind: 'special' },
+            { x: 190, y: 275, w: 215, h: 150, label: '식당',     kind: 'special' },
+            { x: 505, y: 275, w: 18,  h: 145, label: 'EPS',      kind: 'eps' },
+            { x: 523, y: 275, w: 50,  h: 145, label: 'E/V',      kind: 'elevator' },
+            { x: 573, y: 275, w: 62,  h: 145, label: '중앙계단', kind: 'stairs' },
+            { x: 635, y: 275, w: 60,  h: 145, label: '화장실(여)', kind: 'restroom' },
+            { x: 695, y: 275, w: 60,  h: 145, label: '화장실(남)', kind: 'restroom' },
+            { x: 755, y: 275, w: 100, h: 145, label: '도움반',   kind: 'classroom' },
+            { x: 855, y: 275, w: 100, h: 145, label: '보건실',   kind: 'special' }
+          ],
+          refs: [
+            { x: 455, y: 78,  text: '▼ 중앙현관 (주출입구)' },
+            { x: 455, y: 448, text: '▲ 분리수거장 가는길' }
+          ]
+        },
+        2: {
+          corridors: [
+            { x: 55, y: 225, w: 915, h: 50 }
+          ],
+          rooms: [
+            { x: 60,  y: 95,  w: 60,  h: 130, label: '서쪽계단', kind: 'stairs' },
+            { x: 128, y: 105, w: 572, h: 112, label: '지붕 (출입불가)', kind: 'roof' },
+            { x: 705, y: 95,  w: 150, h: 130, label: '놀이데크', kind: 'outdoor' },
+            { x: 55,  y: 275, w: 120, h: 138, label: '도서관',   kind: 'special' },
+            { x: 175, y: 275, w: 60,  h: 138, label: '전산실',   kind: 'special' },
+            { x: 235, y: 275, w: 70,  h: 138, label: '1-1',      kind: 'classroom' },
+            { x: 305, y: 275, w: 75,  h: 138, label: '교사연구실', kind: 'office' },
+            { x: 380, y: 275, w: 125, h: 138, label: '놀이공간', kind: 'special' },
+            { x: 110, y: 422, w: 395, h: 58,  label: '라온마당', kind: 'outdoor' },
+            { x: 505, y: 275, w: 18,  h: 138, label: 'EPS',      kind: 'eps' },
+            { x: 523, y: 275, w: 50,  h: 138, label: 'E/V',      kind: 'elevator' },
+            { x: 573, y: 275, w: 62,  h: 138, label: '중앙계단', kind: 'stairs' },
+            { x: 635, y: 275, w: 60,  h: 138, label: '화장실(여)', kind: 'restroom' },
+            { x: 695, y: 275, w: 60,  h: 138, label: '화장실(남)', kind: 'restroom' },
+            { x: 755, y: 275, w: 75,  h: 138, label: '2-1',      kind: 'classroom' },
+            { x: 830, y: 275, w: 70,  h: 138, label: '3-1',      kind: 'classroom' },
+            { x: 900, y: 275, w: 70,  h: 138, label: '4-1',      kind: 'classroom' }
+          ],
+          refs: [
+            { x: 95,  y: 210, text: '← 별관 연결' },
+            { x: 920, y: 210, text: '체육관 연결 →' }
+          ]
+        },
+        3: {
+          corridors: [
+            { x: 55, y: 225, w: 915, h: 50 }
+          ],
+          rooms: [
+            { x: 60,  y: 95,  w: 60,  h: 130, label: '서쪽계단', kind: 'stairs' },
+            { x: 55,  y: 275, w: 135, h: 140, label: '과학실',   kind: 'special' },
+            { x: 190, y: 275, w: 65,  h: 140, label: '준비실',   kind: 'special' },
+            { x: 255, y: 275, w: 80,  h: 140, label: '전담교사실', kind: 'office' },
+            { x: 335, y: 275, w: 70,  h: 140, label: '학년연구실', kind: 'office' },
+            { x: 405, y: 275, w: 100, h: 140, label: '놀이공간', kind: 'special' },
+            { x: 505, y: 275, w: 18,  h: 140, label: 'EPS',      kind: 'eps' },
+            { x: 523, y: 275, w: 50,  h: 140, label: 'E/V',      kind: 'elevator' },
+            { x: 573, y: 275, w: 62,  h: 140, label: '중앙계단', kind: 'stairs' },
+            { x: 635, y: 275, w: 60,  h: 140, label: '화장실(여)', kind: 'restroom' },
+            { x: 695, y: 275, w: 60,  h: 140, label: '화장실(남)', kind: 'restroom' },
+            { x: 755, y: 275, w: 75,  h: 140, label: '5-1',      kind: 'classroom' },
+            { x: 830, y: 275, w: 70,  h: 140, label: '5-2',      kind: 'classroom' },
+            { x: 900, y: 275, w: 70,  h: 140, label: '6-1',      kind: 'classroom' }
+          ],
+          refs: [
+            { x: 95, y: 210, text: '← 별관 연결' }
+          ]
+        }
+      };
+
+      const ROOM_COLORS = {
+        classroom: { f: '#e0f2fe', s: '#475569', t: '#0c4a6e' },
+        office:    { f: '#d1fae5', s: '#475569', t: '#065f46' },
+        special:   { f: '#ede9fe', s: '#475569', t: '#4c1d95' },
+        restroom:  { f: '#fce7f3', s: '#475569', t: '#831843' },
+        stairs:    { f: '#fef3c7', s: '#b45309', t: '#78350f' },
+        elevator:  { f: '#cffafe', s: '#0e7490', t: '#164e63' },
+        entrance:  { f: '#ffedd5', s: '#c2410c', t: '#7c2d12' },
+        outdoor:   { f: '#ecfccb', s: '#4d7c0f', t: '#365314' },
+        eps:       { f: '#e2e8f0', s: '#64748b', t: '#475569' },
+        roof:      { f: '#f1f5f9', s: '#94a3b8', t: '#64748b' }
+      };
+
+      /* =====================================================================
+         2. 기본 본관 1~3층 그래프 생성 (서쪽계단 X=90, E/V X=548, 중앙계단 X=604)
+         ===================================================================== */
+      function createDefaultData() {
+        const nodes = {};
+        const edges = [];
+        const add = (id, name, floor, x, y, type, qrHeading = null) => {
+          nodes[id] = { id, name, floor, x, y, type, ...(qrHeading !== null ? { qrHeading } : {}) };
+        };
+        const link = (a, b, custom = null) => {
+          const na = nodes[a], nb = nodes[b];
+          if (!na || !nb) return;
+          const d = custom !== null ? custom : Math.max(8, Math.round(Math.hypot(na.x - nb.x, na.y - nb.y)));
+          edges.push({ from: a, to: b, distance: d });
+        };
+        const chainCorridor = (floor, xs) => {
+          const uniq = [...new Set(xs)].sort((a, b) => a - b);
+          const ids = uniq.map((x) => {
+            const id = `${floor}f_c_${x}`;
+            add(id, `${floor}층 복도`, floor, x, CORRIDOR_Y, 'waypoint');
+            return id;
+          });
+          for (let i = 0; i < ids.length - 1; i++) link(ids[i], ids[i + 1]);
+        };
+
+        // --- 1층 ---
+        chainCorridor(1, [90, 122, 150, 215, 298, 328, 455, 548, 555, 604, 648, 665, 725, 742, 805, 848, 905, 935]);
+        add('1f_stairs_w',  '서쪽계단',         1, 90,  140, 'stairs',   180); link('1f_stairs_w',  '1f_c_90');
+        add('1f_duty',      '숙직실',           1, 150, 140, 'office');        link('1f_duty',      '1f_c_150');
+        add('1f_doc',       '문서실',           1, 215, 140, 'office');        link('1f_doc',       '1f_c_215');
+        add('1f_meeting',   '회의실',           1, 328, 140, 'special');       link('1f_meeting',   '1f_c_328');
+        add('1f_main_ent',  '중앙현관',         1, 455, 115, 'entrance', 180); link('1f_main_ent',  '1f_c_455');
+        add('1f_admin',     '행정실',           1, 555, 140, 'office');        link('1f_admin',     '1f_c_555');
+        add('1f_broadcast', '방송실',           1, 648, 140, 'special');       link('1f_broadcast', '1f_c_648');
+        add('1f_office',    '교무실',           1, 742, 140, 'office');        link('1f_office',    '1f_c_742');
+        add('1f_principal', '교장실',           1, 848, 140, 'office');        link('1f_principal', '1f_c_848');
+        add('1f_east_ent',  '동측 출입구',      1, 935, 215, 'entrance', 270); link('1f_east_ent',  '1f_c_935');
+        add('1f_kitchen',   '조리실',           1, 122, 375, 'special');       link('1f_kitchen',   '1f_c_122');
+        add('1f_cafeteria', '식당',             1, 298, 375, 'special');       link('1f_cafeteria', '1f_c_298');
+        add('1f_recycle',   '분리수거장 가는길', 1, 455, 410, 'entrance', 0);   link('1f_recycle',   '1f_c_455');
+        add('1f_ev',        'E/V',              1, 548, 375, 'elevator', 0);   link('1f_ev',        '1f_c_548');
+        add('1f_stairs_c',  '중앙계단',         1, 604, 375, 'stairs',   0);   link('1f_stairs_c',  '1f_c_604');
+        add('1f_wc_f',      '화장실(여)',       1, 665, 375, 'restroom');      link('1f_wc_f',      '1f_c_665');
+        add('1f_wc_m',      '화장실(남)',       1, 725, 375, 'restroom');      link('1f_wc_m',      '1f_c_725');
+        add('1f_help',      '도움반',           1, 805, 375, 'classroom');     link('1f_help',      '1f_c_805');
+        add('1f_nurse',     '보건실',           1, 905, 375, 'special');       link('1f_nurse',     '1f_c_905');
+
+        // --- 2층 ---
+        chainCorridor(2, [90, 115, 205, 270, 342, 442, 548, 604, 665, 725, 780, 792, 865, 935]);
+        add('2f_stairs_w', '서쪽계단',   2, 90,  140, 'stairs',   180); link('2f_stairs_w', '2f_c_90');
+        add('2f_deck',     '놀이데크',   2, 780, 140, 'outdoor');       link('2f_deck',     '2f_c_780');
+        add('2f_lib',      '도서관',     2, 115, 365, 'special');       link('2f_lib',      '2f_c_115');
+        add('2f_comp',     '전산실',     2, 205, 365, 'special');       link('2f_comp',     '2f_c_205');
+        add('2f_1_1',      '1-1',        2, 270, 365, 'classroom');     link('2f_1_1',      '2f_c_270');
+        add('2f_lab',      '교사연구실', 2, 342, 365, 'office');        link('2f_lab',      '2f_c_342');
+        add('2f_play',     '놀이공간',   2, 442, 365, 'special');       link('2f_play',     '2f_c_442');
+        add('2f_raon',     '라온마당',   2, 310, 452, 'outdoor');
+        link('2f_raon', '2f_play'); link('2f_raon', '2f_lib');
+        add('2f_ev',       'E/V',        2, 548, 365, 'elevator', 0);   link('2f_ev',       '2f_c_548');
+        add('2f_stairs_c', '중앙계단',   2, 604, 365, 'stairs',   0);   link('2f_stairs_c', '2f_c_604');
+        add('2f_wc_f',     '화장실(여)', 2, 665, 365, 'restroom');      link('2f_wc_f',     '2f_c_665');
+        add('2f_wc_m',     '화장실(남)', 2, 725, 365, 'restroom');      link('2f_wc_m',     '2f_c_725');
+        add('2f_2_1',      '2-1',        2, 792, 365, 'classroom');     link('2f_2_1',      '2f_c_792');
+        add('2f_3_1',      '3-1',        2, 865, 365, 'classroom');     link('2f_3_1',      '2f_c_865');
+        add('2f_4_1',      '4-1',        2, 935, 365, 'classroom');     link('2f_4_1',      '2f_c_935');
+
+        // --- 3층 ---
+        chainCorridor(3, [90, 122, 222, 295, 370, 455, 548, 604, 665, 725, 792, 865, 935]);
+        add('3f_stairs_w',  '서쪽계단',   3, 90,  140, 'stairs',   180); link('3f_stairs_w',  '3f_c_90');
+        add('3f_sci',       '과학실',     3, 122, 365, 'special');       link('3f_sci',       '3f_c_122');
+        add('3f_prep',      '준비실',     3, 222, 365, 'special');       link('3f_prep',      '3f_c_222');
+        add('3f_subj',      '전담교사실', 3, 295, 365, 'office');        link('3f_subj',      '3f_c_295');
+        add('3f_grade_lab', '학년연구실', 3, 370, 365, 'office');        link('3f_grade_lab', '3f_c_370');
+        add('3f_play',      '놀이공간',   3, 455, 365, 'special');       link('3f_play',      '3f_c_455');
+        add('3f_ev',        'E/V',        3, 548, 365, 'elevator', 0);   link('3f_ev',        '3f_c_548');
+        add('3f_stairs_c',  '중앙계단',   3, 604, 365, 'stairs',   0);   link('3f_stairs_c',  '3f_c_604');
+        add('3f_wc_f',      '화장실(여)', 3, 665, 365, 'restroom');      link('3f_wc_f',      '3f_c_665');
+        add('3f_wc_m',      '화장실(남)', 3, 725, 365, 'restroom');      link('3f_wc_m',      '3f_c_725');
+        add('3f_5_1',       '5-1',        3, 792, 365, 'classroom');     link('3f_5_1',       '3f_c_792');
+        add('3f_5_2',       '5-2',        3, 865, 365, 'classroom');     link('3f_5_2',       '3f_c_865');
+        add('3f_6_1',       '6-1',        3, 935, 365, 'classroom');     link('3f_6_1',       '3f_c_935');
+
+        // --- 수직 연결 (1F ↔ 2F ↔ 3F) ---
+        link('1f_stairs_w', '2f_stairs_w', 75); link('2f_stairs_w', '3f_stairs_w', 75);
+        link('1f_stairs_c', '2f_stairs_c', 75); link('2f_stairs_c', '3f_stairs_c', 75);
+        link('1f_ev',       '2f_ev',       65); link('2f_ev',       '3f_ev',       65);
+
+        return {
+          version: 6,
+          buildingNorthOffset: 0,
+          floors: { 1: { image: null }, 2: { image: null }, 3: { image: null } },
+          nodes,
+          edges
+        };
+      }
+
+      /* =====================================================================
+         3. 상태 및 DOM 참조
+         ===================================================================== */
+      const st = {
+        mode: 'nav',
+        map: createDefaultData(),
+        startId: '1f_main_ent',
+        destId: '1f_admin',
+        verticalPref: 'stairs',
+        rawRoute: [],
+        route: [],
+        step: 0,
+        stream: null,
+        rearDevices: [],
+        lensIdx: 0,
+        compassRaw: null,
+        lastCompassRaw: null,
+        lastRelGyroAlpha: null,
+        hasRelGyro: false,
+        filteredHeading: 180,
+        hasSensorFix: false,
+        calibMode: 'idle',
+        manualOffset: 0,
+        simHeading: 180,
+        usingSimSlider: false,
+        targetRel: 0,
+        smoothRel: 0,
+        oriTimer1: null,
+        arrivalCelebratedKey: '',
+        confettiParticles: [],
+        confettiRaf: null,
+        isAdminAuthed: false,
+        koVoice: null,
+        qrDetector: null,
+        qrTimer: null,
+        lastQrTs: 0,
+        miniExpanded: false,
+        miniHeadingUp: true,
+        miniPreviewFloor: 1,
+        svgKey: '',
+        edFloor: 1,
+        edTool: 'select',
+        selectedId: null,
+        connectSrc: null,
+        pendingXY: null
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const dom = {
+        viewNav: $('viewNav'), viewEditor: $('viewEditor'), arVideo: $('arVideo'), focusTapLayer: $('focusTapLayer'),
+        confettiCanvas: $('confettiCanvas'),
+        hudTop: $('hudTop'), hudBottomLeft: $('hudBottomLeft'),
+        hudRouteTrigger: $('hudRouteTrigger'), hudFloorBadge: $('hudFloorBadge'),
+        hudInstruction: $('hudInstruction'), hudRouteSummary: $('hudRouteSummary'), landmarkBar: $('landmarkBar'),
+        btnOpenRouteTop: $('btnOpenRouteTop'), btnRepeatTts: $('btnRepeatTts'),
+        diagBanner: $('diagBanner'), diagText: $('diagText'), btnRetryPerm: $('btnRetryPerm'), btnCloseDiag: $('btnCloseDiag'),
+        startOverlay: $('startOverlay'), startQrBadge: $('startQrBadge'),
+        overlayStartSel: $('overlayStartSel'), btnOverlaySwap: $('btnOverlaySwap'),
+        overlayDestSel: $('overlayDestSel'),
+        overlayPrefBtns: document.querySelectorAll('[data-overlay-pref]'),
+        overlayRouteText: $('overlayRouteText'),
+        btnLaunchAR: $('btnLaunchAR'),
+        arArrowFrame: $('arArrowFrame'), arArrowSvg: $('arArrowSvg'),
+        arSpecialBox: $('arSpecialBox'), arSpIcon: $('arSpIcon'), arSpTitle: $('arSpTitle'), arSpSub: $('arSpSub'),
+        arDirTag: $('arDirTag'), arTargetTag: $('arTargetTag'),
+        testPop: $('testPop'), manualDegText: $('manualDegText'), headingSlider: $('headingSlider'), btnUseAutoCompass: $('btnUseAutoCompass'),
+        nextStepHint: $('nextStepHint'),
+        btnPrevStep: $('btnPrevStep'), btnNextStep: $('btnNextStep'), btnNextLabel: $('btnNextLabel'), btnNextArrow: $('btnNextArrow'),
+        btnCalibrate: $('btnCalibrate'), btnTestToggle: $('btnTestToggle'),
+        minimapBackdrop: $('minimapBackdrop'), minimapWidget: $('minimapWidget'), minimapSvg: $('minimapSvg'),
+        miniFloorChip: $('miniFloorChip'), miniFloorTabs: $('miniFloorTabs'),
+        btnMiniRotate: $('btnMiniRotate'), btnMiniExpand: $('btnMiniExpand'),
+        miniModeLabel: $('miniModeLabel'), miniExpandHint: $('miniExpandHint'),
+        routeSheetBg: $('routeSheetBg'), btnCloseRoute: $('btnCloseRoute'), destSearch: $('destSearch'),
+        startSel: $('startSel'), destSel: $('destSel'),
+        prefBtns: document.querySelectorAll('[data-pref]'), btnSwapRoute: $('btnSwapRoute'), btnApplyRoute: $('btnApplyRoute'),
+        btnBackToAR: $('btnBackToAR'), northOffsetBadge: $('northOffsetBadge'),
+        btnSaveBuildingNorth: $('btnSaveBuildingNorth'), btnResetNorthOffset: $('btnResetNorthOffset'), liveCompassText: $('liveCompassText'),
+        edFloorBtns: document.querySelectorAll('[data-efloor]'), toolBtns: document.querySelectorAll('[data-tool]'),
+        imgInput: $('imgInput'), btnClearImg: $('btnClearImg'), edFloorTag: $('edFloorTag'), edHint: $('edHint'), editorSvg: $('editorSvg'),
+        inspectPanel: $('inspectPanel'), inspectTitle: $('inspectTitle'),
+        editNameIn: $('editNameIn'), editTypeIn: $('editTypeIn'), qrUrlIn: $('qrUrlIn'),
+        btnCopyQr: $('btnCopyQr'), btnSaveEdit: $('btnSaveEdit'), btnDelNode: $('btnDelNode'),
+        addPanel: $('addPanel'), newNameIn: $('newNameIn'), newTypeIn: $('newTypeIn'),
+        btnCancelAdd: $('btnCancelAdd'), btnCommitAdd: $('btnCommitAdd'),
+        btnExport: $('btnExport'), jsonIn: $('jsonIn'), btnReset: $('btnReset'),
+        toasts: $('toasts'), modalBg: $('modalBg'), modalTitle: $('modalTitle'), modalDesc: $('modalDesc'),
+        btnModalNo: $('btnModalNo'), btnModalYes: $('btnModalYes'),
+        adminModalBg: $('adminModalBg'), adminLoginForm: $('adminLoginForm'),
+        adminIdIn: $('adminIdIn'), adminPwIn: $('adminPwIn'), adminErrMsg: $('adminErrMsg'),
+        btnAdminCancel: $('btnAdminCancel')
+      };
+
+      /* =====================================================================
+         4. 유틸리티 (상단/하단 HUD 크기 동적 동기화로 중앙 AR 영역 정확 정렬)
+         ===================================================================== */
+      function syncHudBounds() {
+        if (st.mode !== 'nav') return;
+        if (dom.hudTop) {
+          const rect = dom.hudTop.getBoundingClientRect();
+          if (rect.height > 0) {
+            document.documentElement.style.setProperty('--hud-bottom', `${Math.round(rect.bottom + 8)}px`);
+          }
+        }
+        if (dom.hudBottomLeft) {
+          const bRect = dom.hudBottomLeft.getBoundingClientRect();
+          if (bRect.height > 0) {
+            const fromBottom = Math.round(window.innerHeight - bRect.top + 8);
+            document.documentElement.style.setProperty('--ctrl-bottom', `${Math.max(120, fromBottom)}px`);
+          }
+        }
+      }
+
+      function toast(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = 'toast ' + type;
+        el.textContent = msg;
+        dom.toasts.appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.25s'; setTimeout(() => el.remove(), 260); }, 2500);
+      }
+      function showDiag(html, warn = false) {
+        if (!html) { dom.diagBanner.className = 'diag-banner'; return; }
+        dom.diagText.innerHTML = html;
+        dom.diagBanner.className = 'diag-banner open' + (warn ? ' warn' : '');
+      }
+
+      let modalCb = null;
+      function confirmBox(title, desc, cb) {
+        dom.modalTitle.textContent = title;
+        dom.modalDesc.textContent = desc;
+        modalCb = cb;
+        dom.modalBg.classList.add('open');
+      }
+      dom.btnModalNo.onclick = () => { dom.modalBg.classList.remove('open'); modalCb = null; };
+      dom.btnModalYes.onclick = () => { const fn = modalCb; dom.modalBg.classList.remove('open'); modalCb = null; if (fn) fn(); };
+
+      function formatForTTS(text) {
+        if (!text) return '';
+        return String(text)
+          .replace(/화장실\s*\(\s*여\s*\)/g, '여자 화장실')
+          .replace(/화장실\s*\(\s*남\s*\)/g, '남자 화장실')
+          .replace(/E\s*\/\s*V/gi, '엘리베이터')
+          .replace(/(\d+)\s*-\s*(\d+)/g, '$1학년 $2반 교실');
+      }
+
+      function getBatchimInfo(word) {
+        if (!word) return { has: false, isRieul: false };
+        const clean = String(word).trim().replace(/\)$/, '');
+        const ch = clean.slice(-1);
+        const code = ch.charCodeAt(0);
+        if (code >= 0xAC00 && code <= 0xD7A3) {
+          const jong = (code - 0xAC00) % 28;
+          return { has: jong !== 0, isRieul: jong === 8 };
+        }
+        return { has: /[013678LMNRlmnr]/.test(ch), isRieul: /[178Ll]/.test(ch) };
+      }
+
+      function josa(word, withB, withoutB) {
+        const info = getBatchimInfo(word);
+        if (withB === '으로' && withoutB === '로') {
+          return word + (info.has && !info.isRieul ? '으로' : '로');
+        }
+        return word + (info.has ? withB : withoutB);
+      }
+
+      function normDeg(a) { return ((a % 360) + 360) % 360; }
+      function getRelAngle(target, heading) { return ((target - heading + 540) % 360) - 180; }
+      function getBearing(a, b) { return normDeg((Math.atan2(b.x - a.x, -(b.y - a.y)) * 180) / Math.PI); }
+
+      /* =====================================================================
+         5. 한국어 내비게이션 TTS (네이버 클로바 보이스 우선 + 기기 내장 TTS 자동 폴백)
+         ===================================================================== */
+      const ttsAudio = new Audio();
+      ttsAudio.preload = 'auto';
+      const clovaCache = new Map();
+      let clovaAvailable = Boolean(CLOVA_TTS_URL);
+      let ttsReqSeq = 0;
+
+      function pickKoreanVoice() {
+        if (!('speechSynthesis' in window)) return;
+        const voices = window.speechSynthesis.getVoices() || [];
+        const ko = voices.filter((v) => /ko/i.test(v.lang));
+        if (!ko.length) return;
+        st.koVoice =
+          ko.find((v) => /google/i.test(v.name)) ||
+          ko.find((v) => /yuna|sora/i.test(v.name)) ||
+          ko.find((v) => /samsung/i.test(v.name)) ||
+          ko[0];
+      }
+
+      function unlockTts() {
+        try {
+          // 모바일 자동재생 정책 해제용 무음 WAV 1회 재생
+          if (!ttsAudio.dataset.unlocked) {
+            ttsAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+            const p = ttsAudio.play();
+            if (p && typeof p.then === 'function') {
+              p.then(() => { ttsAudio.pause(); ttsAudio.dataset.unlocked = '1'; }).catch(() => {});
+            }
+          }
+        } catch (_) {}
+        if (!('speechSynthesis' in window)) return;
+        try {
+          pickKoreanVoice();
+          const u = new SpeechSynthesisUtterance('');
+          u.lang = 'ko-KR'; u.volume = 0;
+          window.speechSynthesis.speak(u);
+        } catch (_) {}
+      }
+
+      function speakWebSpeech(spoken) {
+        if (!spoken || !('speechSynthesis' in window)) return;
+        try {
+          pickKoreanVoice();
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(spoken);
+          u.lang = 'ko-KR'; u.rate = 1.0; u.pitch = 1.0;
+          if (st.koVoice) u.voice = st.koVoice;
+          window.speechSynthesis.speak(u);
+        } catch (_) {}
+      }
+
+      async function speak(text) {
+        if (!text) return;
+        const spoken = formatForTTS(text);
+        const seq = ++ttsReqSeq;
+
+        try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (_) {}
+        if ('speechSynthesis' in window) {
+          try { window.speechSynthesis.cancel(); } catch (_) {}
+        }
+
+        if (clovaAvailable) {
+          try {
+            let audioUrl = clovaCache.get(spoken);
+            if (!audioUrl) {
+              const res = await fetch(CLOVA_TTS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: spoken, speaker: CLOVA_SPEAKER })
+              });
+              const ctype = (res.headers.get('content-type') || '').toLowerCase();
+              if (!res.ok || !ctype.includes('audio')) {
+                if (res.status === 404 || res.status === 405 || res.status === 501 || !ctype.includes('audio')) {
+                  clovaAvailable = false;
+                }
+                throw new Error('CLOVA_UNAVAILABLE');
+              }
+              const blob = await res.blob();
+              audioUrl = URL.createObjectURL(blob);
+              if (clovaCache.size > 40) {
+                const firstKey = clovaCache.keys().next().value;
+                URL.revokeObjectURL(clovaCache.get(firstKey));
+                clovaCache.delete(firstKey);
+              }
+              clovaCache.set(spoken, audioUrl);
+            }
+            if (seq !== ttsReqSeq) return;
+            ttsAudio.src = audioUrl;
+            await ttsAudio.play();
+            return;
+          } catch (_) {
+            if (seq !== ttsReqSeq) return;
+          }
+        }
+        speakWebSpeech(spoken);
+      }
+
+      if ('speechSynthesis' in window) {
+        pickKoreanVoice();
+        window.speechSynthesis.onvoiceschanged = pickKoreanVoice;
+      }
+
+      /* =====================================================================
+         6. 카메라 고해상도 · 연속 초점 · 멀티 렌즈 전환 · 터치 재초점
+         ===================================================================== */
+      async function applyOptimalFocus(track, singleShotFirst = false) {
+        if (!track || typeof track.getCapabilities !== 'function') return;
+        try {
+          const caps = track.getCapabilities();
+          const adv = [];
+          if (caps.zoom && typeof caps.zoom.min === 'number') {
+            adv.push({ zoom: Math.max(caps.zoom.min, Math.min(caps.zoom.max, 1)) });
+          }
+          if (Array.isArray(caps.focusMode)) {
+            if (singleShotFirst && caps.focusMode.includes('single-shot')) {
+              await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] }).catch(() => {});
+              setTimeout(() => {
+                if (track.readyState === 'live' && caps.focusMode.includes('continuous')) {
+                  track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+                }
+              }, 450);
+              return;
+            }
+            if (caps.focusMode.includes('continuous')) adv.push({ focusMode: 'continuous' });
+          }
+          if (adv.length) await track.applyConstraints({ advanced: adv });
+        } catch (_) {}
+      }
+
+      async function refreshRearLenses(activeDeviceId = null) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        try {
+          const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+          if (!all.length) return;
+          const nonFront = all.filter((d) => !/front|user|selfie|전면/i.test(d.label || ''));
+          const list = nonFront.length ? nonFront : all;
+          const score = (d) => {
+            const lb = (d.label || '').toLowerCase();
+            let s = 0;
+            if (/back|rear|environment|후면/.test(lb)) s += 10;
+            if (/main|wide|camera2 0|facing back/.test(lb)) s += 8;
+            if (/\b0\b/.test(lb)) s += 5;
+            if (/ultra|macro|tele|초광각|접사|망원/.test(lb)) s -= 12;
+            return s;
+          };
+          list.sort((a, b) => score(b) - score(a));
+          st.rearDevices = list;
+          if (activeDeviceId) {
+            const idx = list.findIndex((d) => d.deviceId === activeDeviceId);
+            st.lensIdx = idx >= 0 ? idx : 0;
+          }
+        } catch (_) {}
+      }
+
+      async function startCamera(deviceId = null, autoCorrectLens = true) {
+        if (!window.isSecureContext) {
+          showDiag('<strong>HTTPS 보안 주소 필요:</strong> Netlify/GitHub Pages(https://)에서 열어주세요.');
+          return false;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { return false;
+        }
+        if (st.stream) { st.stream.getTracks().forEach((t) => t.stop()); st.stream = null; }
+        const vc = deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+
+        let stream = null, lastErr = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false });
+        } catch (err) {
+          lastErr = err;
+          if (err && err.name !== 'NotAllowedError' && err.name !== 'SecurityError') {
+            try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); lastErr = null; }
+            catch (_) {
+              try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); lastErr = null; }
+              catch (e2) { lastErr = e2; }
+            }
+          }
+        }
+
+        if (!stream) {
+          dom.arVideo.classList.remove('active');
+          const name = (lastErr && lastErr.name) || 'CameraError';
+          showDiag(
+            name === 'NotAllowedError'
+              ? '<strong>카메라 권한 거부:</strong> 주소창 사이트 설정에서 카메라를 <b>허용</b> 후 [다시시도]를 눌러주세요.'
+              : `카메라 연결 실패(${name}). 밝은 시뮬레이션 배경으로 안내합니다.`,
+            name !== 'NotAllowedError'
+          );
+          return false;
+        }
+
+        st.stream = stream;
+        const track = stream.getVideoTracks()[0];
+        const activeId = track && track.getSettings ? track.getSettings().deviceId : null;
+        await refreshRearLenses(activeId);
+
+        if (autoCorrectLens && !deviceId && st.rearDevices.length > 1) {
+          const lb = (track && track.label || '').toLowerCase();
+          if (/ultra|macro|초광각|접사/.test(lb) && st.rearDevices[0].deviceId !== activeId) {
+            return startCamera(st.rearDevices[0].deviceId, false);
+          }
+        }
+
+        dom.arVideo.muted = true;
+        dom.arVideo.srcObject = stream;
+        try { await dom.arVideo.play(); } catch (_) {}
+        dom.arVideo.classList.add('active');
+        await applyOptimalFocus(track, false);
+        showDiag(null);
+        startQrScanner();
+        return true;
+      }
+
+      function onTapToFocus(e) {
+        if (st.mode !== 'nav' || !st.stream) return;
+        const ring = document.createElement('div');
+        ring.className = 'focus-ring';
+        ring.style.left = `${e.clientX}px`;
+        ring.style.top = `${e.clientY}px`;
+        document.body.appendChild(ring);
+        setTimeout(() => ring.remove(), 780);
+        applyOptimalFocus(st.stream.getVideoTracks()[0], true);
+      }
+
+      /* =====================================================================
+         7. 절대 나침반 자동 영점 보정 + QR 자동 보정 + 원탭 정면 맞춤
+         ===================================================================== */
+      function getEffectiveHeading() {
+        if (st.usingSimSlider || !st.hasSensorFix) return normDeg(st.simHeading);
+        if (st.calibMode === 'qr' || st.calibMode === 'manual') {
+          return normDeg(st.filteredHeading + st.manualOffset);
+        }
+        return normDeg(st.filteredHeading - (Number(st.map.buildingNorthOffset) || 0));
+      }
+
+      function updateCalibBadge() {
+        dom.northOffsetBadge.textContent = `북쪽 오프셋: ${Math.round(Number(st.map.buildingNorthOffset) || 0)}°`;
+        dom.liveCompassText.textContent = st.hasSensorFix
+          ? `실시간 나침반: ${Math.round(st.filteredHeading)}° (적용 시선 ${Math.round(getEffectiveHeading())}°)`
+          : '실시간 나침반: 센서 대기 중';
+      }
+
+      function onOrientation(ev) {
+        let heading = null;
+        if (typeof ev.webkitCompassHeading === 'number' && !Number.isNaN(ev.webkitCompassHeading)) {
+          heading = normDeg(ev.webkitCompassHeading);
+        } else if (typeof ev.alpha === 'number' && !Number.isNaN(ev.alpha)) {
+          heading = normDeg(360 - ev.alpha);
+        }
+        if (heading === null) return;
+
+        if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
+        st.compassRaw = heading;
+
+        if (!st.hasSensorFix) {
+          st.filteredHeading = heading;
+          st.lastCompassRaw = heading;
+          st.hasSensorFix = true;
+          if (st.calibMode === 'idle') st.calibMode = 'auto';
+        } else {
+          const stepJump = st.lastCompassRaw !== null ? Math.abs(getRelAngle(heading, st.lastCompassRaw)) : 0;
+          st.lastCompassRaw = heading;
+          const diff = getRelAngle(heading, st.filteredHeading);
+
+          if (st.hasRelGyro) {
+            if (st.calibMode === 'auto' && stepJump < 20 && Math.abs(diff) < 35) {
+              st.filteredHeading = normDeg(st.filteredHeading + diff * 0.03);
+            }
+          } else {
+            const alphaWeight = stepJump > 35 ? 0.04 : 0.18;
+            st.filteredHeading = normDeg(st.filteredHeading + diff * alphaWeight);
+          }
+        }
+
+        if (!st.usingSimSlider) {
+          const eff = Math.round(getEffectiveHeading());
+          dom.headingSlider.value = eff;
+          dom.manualDegText.textContent = `${eff}°`;
+        }
+        updateCalibBadge();
+        updateHud();
+      }
+
+      function onRelativeGyroOrientation(ev) {
+        if (ev.absolute === true || typeof ev.alpha !== 'number' || Number.isNaN(ev.alpha)) return;
+        const curRel = normDeg(360 - ev.alpha);
+        if (st.lastRelGyroAlpha === null) {
+          st.lastRelGyroAlpha = curRel;
+          st.hasRelGyro = true;
+          return;
+        }
+        const delta = getRelAngle(curRel, st.lastRelGyroAlpha);
+        st.lastRelGyroAlpha = curRel;
+        if (Math.abs(delta) > 45 || Math.abs(delta) < 0.15) return;
+
+        st.hasRelGyro = true;
+        if (!st.hasSensorFix) {
+          st.filteredHeading = curRel;
+          st.hasSensorFix = true;
+          if (st.calibMode === 'idle') st.calibMode = 'auto';
+        } else {
+          st.filteredHeading = normDeg(st.filteredHeading + delta * 0.85);
+        }
+
+        if (!st.usingSimSlider) {
+          const eff = Math.round(getEffectiveHeading());
+          dom.headingSlider.value = eff;
+          dom.manualDegText.textContent = `${eff}°`;
+        }
+        updateCalibBadge();
+        updateHud();
+      }
+
+      function requestOrientation() {
+        if (!window.isSecureContext || typeof DeviceOrientationEvent === 'undefined') return Promise.resolve(false);
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          return DeviceOrientationEvent.requestPermission().then((res) => {
+            if (res === 'granted') {
+              window.removeEventListener('deviceorientation', onOrientation, true);
+              window.addEventListener('deviceorientation', onOrientation, true);
+              return true;
+            }
+            return false;
+          }).catch(() => false);
+        }
+        window.removeEventListener('deviceorientationabsolute', onOrientation, true);
+        window.removeEventListener('deviceorientation', onOrientation, true);
+        window.removeEventListener('deviceorientation', onRelativeGyroOrientation, true);
+        if (st.oriTimer1) clearTimeout(st.oriTimer1);
+        st.hasSensorFix = false;
+        st.hasRelGyro = false;
+        st.lastCompassRaw = null;
+        st.lastRelGyroAlpha = null;
+        window.addEventListener('deviceorientationabsolute', onOrientation, true);
+        window.addEventListener('deviceorientation', onRelativeGyroOrientation, true);
+        st.oriTimer1 = setTimeout(() => {
+          if (st.hasSensorFix) return;
+          window.removeEventListener('deviceorientationabsolute', onOrientation, true);
+          window.removeEventListener('deviceorientation', onRelativeGyroOrientation, true);
+          window.addEventListener('deviceorientation', onOrientation, true);
+        }, 1000);
+        return Promise.resolve(true);
+      }
+
+      function initQrDetector() {
+        if ('BarcodeDetector' in window) {
+          try {
+            st.qrDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          } catch (_) {
+            st.qrDetector = null;
+          }
+        } else {
+        }
+      }
+
+      function parseQrNodeId(raw) {
+        if (!raw) return null;
+        const trimmed = String(raw).trim();
+        if (st.map.nodes[trimmed]) return trimmed;
+        try {
+          const u = new URL(trimmed);
+          const s = u.searchParams.get('start');
+          if (s && st.map.nodes[s]) return s;
+        } catch (_) {
+          const m = trimmed.match(/[?&]start=([^&#]+)/);
+          if (m && st.map.nodes[decodeURIComponent(m[1])]) return decodeURIComponent(m[1]);
+        }
+        return null;
+      }
+
+      function startQrScanner() {
+        if (!st.qrDetector) return;
+        if (st.qrTimer) clearInterval(st.qrTimer);
+        st.qrTimer = setInterval(async () => {
+          if (st.mode !== 'nav' || !st.stream || dom.arVideo.readyState < 2) return;
+          if (Date.now() - st.lastQrTs < 3000) return;
+          try {
+            const codes = await st.qrDetector.detect(dom.arVideo);
+            if (!codes || !codes.length) return;
+            for (const c of codes) {
+              const nodeId = parseQrNodeId(c.rawValue);
+              if (!nodeId) continue;
+              st.lastQrTs = Date.now();
+              const node = st.map.nodes[nodeId];
+              st.startId = nodeId;
+              st.usingSimSlider = false;
+              if (typeof node.qrHeading === 'number') {
+                if (st.hasSensorFix) {
+                  st.manualOffset = normDeg(node.qrHeading - st.filteredHeading);
+                  st.calibMode = 'qr';
+                } else {
+                  st.simHeading = node.qrHeading;
+                }
+              }
+              updateCalibBadge();
+              recalcRoute(true, false);
+              toast(`QR 자동 보정: ${node.floor}층 ${node.name}`, 'ok');
+              const g = getCurrentStepGuidance();
+              const spokenNode = formatForTTS(node.name);
+              speak(`현재 위치가 ${node.floor}층 ${josa(spokenNode, '으로', '로')} 보정되었습니다. ${g.tts}`);
+              break;
+            }
+          } catch (_) {}
+        }, 600);
+      }
+
+      function launchAR() {
+        dom.startOverlay.classList.add('hidden');
+        st.usingSimSlider = false;
+        unlockTts();
+        Promise.allSettled([requestOrientation(), startCamera(null, true)]);
+        announceCurrentStep(true);
+        requestAnimationFrame(syncHudBounds);
+      }
+
+      /* =====================================================================
+         8. 로컬 저장소 & 다익스트라 경로 탐색
+         ===================================================================== */
+      function saveMap() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(st.map)); }
+        catch (_) { toast('저장 공간 부족: JSON으로 백업하세요.', 'warn'); }
+      }
+      function loadMap() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const p = JSON.parse(raw);
+            if (p && p.nodes && Array.isArray(p.edges) && p.floors) {
+              if (typeof p.buildingNorthOffset !== 'number') p.buildingNorthOffset = 0;
+              st.map = p;
+            }
+          }
+        } catch (_) {}
+      }
+
+      function edgeWeight(e) {
+        const a = st.map.nodes[e.from], b = st.map.nodes[e.to];
+        const base = Number(e.distance) > 0 ? Number(e.distance) : 40;
+        if (!a || !b || a.floor === b.floor) return base;
+        const isEv = a.type === 'elevator' || b.type === 'elevator';
+        if (st.verticalPref === 'stairs') return isEv ? 1500 : 45;
+        if (st.verticalPref === 'elevator') return isEv ? 40 : 1500;
+        return base;
+      }
+
+      function findShortestPath(startId, destId) {
+        const nodes = st.map.nodes;
+        if (!nodes[startId] || !nodes[destId]) return [];
+        if (startId === destId) return [startId];
+        const adj = {};
+        Object.keys(nodes).forEach((id) => { adj[id] = []; });
+        st.map.edges.forEach((e) => {
+          if (nodes[e.from] && nodes[e.to]) {
+            const w = edgeWeight(e);
+            adj[e.from].push({ to: e.to, w });
+            adj[e.to].push({ to: e.from, w });
+          }
+        });
+        const dist = {}, prev = {}, unvis = new Set(Object.keys(nodes));
+        Object.keys(nodes).forEach((id) => { dist[id] = Infinity; prev[id] = null; });
+        dist[startId] = 0;
+        while (unvis.size) {
+          let cur = null, best = Infinity;
+          unvis.forEach((id) => { if (dist[id] < best) { best = dist[id]; cur = id; } });
+          if (!cur || cur === destId) break;
+          unvis.delete(cur);
+          for (const nb of adj[cur]) {
+            if (!unvis.has(nb.to)) continue;
+            const alt = dist[cur] + nb.w;
+            if (alt < dist[nb.to]) { dist[nb.to] = alt; prev[nb.to] = cur; }
+          }
+        }
+        if (dist[destId] === Infinity) return [];
+        const path = [];
+        for (let k = destId; k; k = prev[k]) path.unshift(k);
+        return path;
+      }
+
+      function simplifyRoute(raw) {
+        if (raw.length <= 2) return raw.slice();
+        const nodes = st.map.nodes;
+        const major = raw.filter((id, idx) => idx === 0 || idx === raw.length - 1 || (nodes[id] && nodes[id].type !== 'waypoint'));
+        const out = [major[0]];
+        for (let i = 1; i < major.length - 1; i++) {
+          const p = nodes[out[out.length - 1]], c = nodes[major[i]], n = nodes[major[i + 1]];
+          if (p && c && n && p.floor !== c.floor && c.floor !== n.floor && p.type === c.type && c.type === n.type && Math.abs(p.x - n.x) < 15) {
+            continue;
+          }
+          out.push(major[i]);
+        }
+        out.push(major[major.length - 1]);
+        return out;
+      }
+
+      /* =====================================================================
+         9. 주변 교실 · 복도 끝 · 좌우 방향 기반 랜드마크 TTS & 유도 안내 엔진
+         ===================================================================== */
+      function isCorridorEnd(node, walkingEast) {
+        const sameSide = Object.values(st.map.nodes).filter((n) =>
+          n.floor === node.floor &&
+          n.type !== 'waypoint' &&
+          n.id !== '2f_raon' &&
+          ((node.y < CORRIDOR_Y) ? (n.y < CORRIDOR_Y) : (n.y >= CORRIDOR_Y))
+        );
+        if (!sameSide.length) return false;
+        const minX = Math.min(...sameSide.map((n) => n.x));
+        const maxX = Math.max(...sameSide.map((n) => n.x));
+        if (walkingEast) return node.x >= maxX - 35 || node.x >= 845;
+        return node.x <= minX + 35 || node.x <= 130;
+      }
+
+      function extractPassedLandmarks(cur, nxt) {
+        const walkingEast = nxt.x > cur.x;
+        const minX = Math.min(cur.x, nxt.x) + 28;
+        const maxX = Math.max(cur.x, nxt.x) - 28;
+        const destSideSouth = nxt.y >= CORRIDOR_Y;
+
+        const candidates = Object.values(st.map.nodes).filter((n) =>
+          n.floor === cur.floor &&
+          n.id !== cur.id && n.id !== nxt.id &&
+          n.type !== 'waypoint' && n.id !== '2f_raon' &&
+          n.x > minX && n.x < maxX
+        );
+        candidates.sort((a, b) => walkingEast ? (a.x - b.x) : (b.x - a.x));
+
+        const dedup = (arr) => {
+          const res = [];
+          const seen = new Set();
+          arr.forEach((n) => {
+            const label = n.type === 'restroom' ? '화장실' : n.name;
+            if (!seen.has(label)) { seen.add(label); res.push({ label, node: n }); }
+          });
+          return res;
+        };
+
+        const sameSide = dedup(candidates.filter((n) => (n.y >= CORRIDOR_Y) === destSideSouth && n.type !== 'elevator'));
+        let list = sameSide.length >= 2 ? sameSide : dedup(candidates);
+
+        if (list.length > 3) {
+          const mid = Math.floor(list.length / 2);
+          list = [list[0], list[mid], list[list.length - 1]];
+        }
+        return list.map((item) => item.label);
+      }
+
+      function getCurrentStepGuidance() {
+        const nodes = st.map.nodes;
+        const r = st.route;
+        if (!r.length) {
+          return { kind: 'error', title: '연결된 경로 없음', tts: '연결된 경로가 없습니다.', hintText: '', chips: [], walkBearing: 0, dirTag: '경로 없음', targetTag: '' };
+        }
+        const cur = nodes[r[st.step]];
+        if (st.step >= r.length - 1) {
+          const spokenCur = formatForTTS(cur.name);
+          return {
+            kind: 'arrived',
+            title: `${cur.floor}층 ${cur.name} 도착 완료!`,
+            tts: `목적지 ${cur.floor}층 ${spokenCur}에 도착했습니다.`,
+            hintText: '',
+            chips: [{ text: `${cur.floor}F ${cur.name} 도착`, cls: 'dest' }],
+            walkBearing: getEffectiveHeading(),
+            dirTag: '도착 완료',
+            targetTag: `${cur.floor}층 ${cur.name}`
+          };
+        }
+
+        const nxt = nodes[r[st.step + 1]];
+        const spokenCur = formatForTTS(cur.name);
+        const spokenNxt = formatForTTS(nxt.name);
+
+        if (cur.floor !== nxt.floor) {
+          const isEv = cur.type === 'elevator' || nxt.type === 'elevator';
+          const up = nxt.floor > cur.floor;
+          const verb = up ? '올라가세요' : '내려가세요';
+          const ctaPrompt = `${nxt.floor}층에 도착하셨다면 아래 초록색 버튼을 눌러 다음 안내를 시작하세요.`;
+          const tts = isEv
+            ? `엘리베이터를 이용해 ${nxt.floor}층으로 이동하세요. ${ctaPrompt}`
+            : `${josa(spokenCur, '을', '를')} 이용해 ${nxt.floor}층으로 ${verb}. ${ctaPrompt}`;
+          return {
+            kind: isEv ? 'ev' : 'stairs',
+            up,
+            title: isEv ? `엘리베이터 → ${nxt.floor}층 이동` : `${cur.name} → ${nxt.floor}층 ${up ? '올라가기' : '내려가기'}`,
+            tts,
+            hintLine1: `👇 ${nxt.floor}층에 도착하셨다면 아래 초록색 버튼을 눌러`,
+            hintLine2: '다음 안내를 시작하세요!',
+            chips: [
+              { text: `${cur.floor}F ${cur.name}`, cls: 'cur' },
+              { text: `${nxt.floor}F ${nxt.name}`, cls: 'dest' }
+            ],
+            walkBearing: getEffectiveHeading(),
+            dirTag: isEv ? '엘리베이터' : (up ? '층 올라가기' : '층 내려가기'),
+            targetTag: `${nxt.floor}층 ${nxt.name}`
+          };
+        }
+
+        const ctaWalkPrompt = `${spokenNxt}에 도착하셨다면 아래 초록색 버튼을 눌러 다음 안내를 시작하세요.`;
+        const hintLine1 = `👇 ${nxt.name}에 도착하셨다면 아래 초록색 버튼을 눌러`;
+        const hintLine2 = '다음 안내를 시작하세요!';
+
+        if (nxt.id === '2f_raon' || cur.id === '2f_raon') {
+          const bearing = getBearing(cur, nxt);
+          const tts = nxt.id === '2f_raon'
+            ? `${spokenCur} 남쪽 출구로 나가면 라온마당입니다. ${ctaWalkPrompt}`
+            : `라온마당에서 ${josa(spokenNxt, '으로', '로')} 이동하세요. ${ctaWalkPrompt}`;
+          return {
+            kind: 'walk',
+            title: `${cur.name} → ${nxt.name}`,
+            tts,
+            hintLine1,
+            hintLine2,
+            chips: [{ text: cur.name, cls: 'cur' }, { text: nxt.name, cls: 'dest' }],
+            walkBearing: bearing,
+            dirTag: '출구 이동',
+            targetTag: nxt.name
+          };
+        }
+
+        const dx = nxt.x - cur.x;
+        const isCorridorWalk = Math.abs(dx) >= 35;
+
+        if (!isCorridorWalk) {
+          const bearing = getBearing(cur, nxt);
+          const tts = `정면 복도를 건너 ${josa(spokenNxt, '으로', '로')} 이동하세요. ${ctaWalkPrompt}`;
+          return {
+            kind: 'walk',
+            title: `복도 건너편 · ${nxt.name}`,
+            tts,
+            hintLine1,
+            hintLine2,
+            chips: [{ text: cur.name, cls: 'cur' }, { text: `${nxt.name}(정면)`, cls: 'dest' }],
+            walkBearing: bearing,
+            dirTag: '직진',
+            targetTag: `${nxt.name} (정면)`
+          };
+        }
+
+        const walkingEast = dx > 0;
+        const walkBearing = walkingEast ? 90 : 270;
+
+        let entryTurnText = '복도를 따라';
+        let entryTurnShort = '직진';
+        if (cur.id === '1f_east_ent') {
+          entryTurnText = '정면 복도를 따라';
+          entryTurnShort = '직진';
+        } else {
+          const exitHeading = cur.y < CORRIDOR_Y ? 180 : 0;
+          const turnRel = getRelAngle(walkBearing, exitHeading);
+          if (turnRel < -30) { entryTurnText = '왼쪽 복도로 돌아'; entryTurnShort = '왼쪽 복도'; }
+          else if (turnRel > 30) { entryTurnText = '오른쪽 복도로 돌아'; entryTurnShort = '오른쪽 복도'; }
+        }
+
+        let doorSide = '';
+        if (nxt.id === '1f_east_ent') {
+          doorSide = '정면 끝';
+        } else {
+          const destNorth = nxt.y < CORRIDOR_Y;
+          doorSide = walkingEast ? (destNorth ? '왼쪽' : '오른쪽') : (destNorth ? '오른쪽' : '왼쪽');
+        }
+
+        const atEnd = isCorridorEnd(nxt, walkingEast);
+        const passed = extractPassedLandmarks(cur, nxt);
+        const passedSpoken = passed.map((p) => formatForTTS(p));
+        const sideLabel = atEnd && doorSide !== '정면 끝' ? `${doorSide} 끝` : doorSide;
+
+        let tts = '';
+        const arrivalPhrase = atEnd
+          ? `${sideLabel === '정면 끝' ? '복도 끝' : sideLabel}이 ${spokenNxt}입니다.`
+          : `${doorSide}에 ${josa(spokenNxt, '이', '가')} 있습니다.`;
+
+        if (passedSpoken.length === 0) {
+          tts = atEnd
+            ? `${entryTurnText} 복도 끝까지 직진하세요. ${arrivalPhrase} ${ctaWalkPrompt}`
+            : `${entryTurnText} 바로 ${doorSide}에 ${josa(spokenNxt, '이', '가')} 있습니다. ${ctaWalkPrompt}`;
+        } else {
+          const passedStr = josa(passedSpoken.join(', '), '을', '를');
+          tts = atEnd
+            ? `${entryTurnText} ${passedStr} 지나 복도 끝까지 직진하세요. ${arrivalPhrase} ${ctaWalkPrompt}`
+            : `${entryTurnText} ${passedStr} 지나세요. ${arrivalPhrase} ${ctaWalkPrompt}`;
+        }
+
+        const chips = [{ text: cur.name, cls: 'cur' }];
+        passed.forEach((p) => chips.push({ text: p, cls: '' }));
+        chips.push({ text: `${nxt.name}(${sideLabel})`, cls: 'dest' });
+
+        const hudShort = atEnd
+          ? `${entryTurnShort} 끝까지 직진 → ${nxt.name}(${sideLabel})`
+          : passed.length
+            ? `${entryTurnShort} · ${passed[0]} 지나 ${nxt.name}(${doorSide})`
+            : `${entryTurnShort} · 바로 ${doorSide} ${nxt.name}`;
+
+        return {
+          kind: 'walk',
+          title: hudShort,
+          tts,
+          hintLine1,
+          hintLine2,
+          chips,
+          walkBearing,
+          dirTag: entryTurnShort,
+          targetTag: `${nxt.name} (${sideLabel})`
+        };
+      }
+
+      /* 목적지 도착 축하 컨페티/폭죽 파티클 애니메이션 */
+      function stopArrivalConfetti() {
+        if (st.confettiRaf) { cancelAnimationFrame(st.confettiRaf); st.confettiRaf = null; }
+        st.confettiParticles = [];
+        dom.confettiCanvas.classList.remove('active');
+        const ctx = dom.confettiCanvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, dom.confettiCanvas.width, dom.confettiCanvas.height);
+      }
+
+      function launchArrivalConfetti() {
+        stopArrivalConfetti();
+        const canvas = dom.confettiCanvas;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        canvas.classList.add('active');
+
+        const colors = ['#10b981', '#0ea5e9', '#2563eb', '#f59e0b', '#ec4899', '#8b5cf6', '#22c55e'];
+        const cx = w * 0.5;
+        const cy = h * 0.46;
+        const particles = [];
+        for (let i = 0; i < 84; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 3.2 + Math.random() * 8.2;
+          particles.push({
+            x: cx + (Math.random() - 0.5) * 32,
+            y: cy + (Math.random() - 0.5) * 24,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 3.6,
+            size: 6 + Math.random() * 6,
+            color: colors[i % colors.length],
+            rot: Math.random() * Math.PI * 2,
+            vRot: (Math.random() - 0.5) * 0.24,
+            shape: i % 3,
+            alpha: 1
+          });
+        }
+        st.confettiParticles = particles;
+        const startTs = performance.now();
+
+        function tick(now) {
+          const elapsed = now - startTs;
+          ctx.clearRect(0, 0, w, h);
+          let alive = 0;
+          for (const p of st.confettiParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vx *= 0.985;
+            p.vy += 0.19;
+            p.rot += p.vRot;
+            if (elapsed > 1700) p.alpha = Math.max(0, p.alpha - 0.025);
+            if (p.alpha <= 0.02 || p.y > h + 40) continue;
+            alive++;
+            ctx.save();
+            ctx.globalAlpha = p.alpha;
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            ctx.fillStyle = p.color;
+            if (p.shape === 1) {
+              ctx.beginPath(); ctx.arc(0, 0, p.size * 0.48, 0, Math.PI * 2); ctx.fill();
+            } else if (p.shape === 2) {
+              ctx.fillRect(-p.size * 0.75, -p.size * 0.22, p.size * 1.5, p.size * 0.44);
+            } else {
+              ctx.fillRect(-p.size * 0.5, -p.size * 0.5, p.size, p.size * 0.7);
+            }
+            ctx.restore();
+          }
+          if (alive > 0 && elapsed < 3600) {
+            st.confettiRaf = requestAnimationFrame(tick);
+          } else {
+            stopArrivalConfetti();
+          }
+        }
+        st.confettiRaf = requestAnimationFrame(tick);
+      }
+
+      function renderLandmarkChips(chips) {
+        dom.landmarkBar.innerHTML = '';
+        chips.forEach((c, idx) => {
+          if (idx > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'lm-sep';
+            sep.textContent = '→';
+            dom.landmarkBar.appendChild(sep);
+          }
+          const span = document.createElement('span');
+          span.className = 'lm-chip' + (c.cls ? ' ' + c.cls : '');
+          span.textContent = c.text;
+          dom.landmarkBar.appendChild(span);
+        });
+      }
+
+      function announceCurrentStep(isStart = false) {
+        const g = getCurrentStepGuidance();
+        if (!g || !g.tts) return;
+        const cur = st.map.nodes[st.route[st.step]];
+        const prefix = (isStart && cur && g.kind !== 'arrived')
+          ? `${cur.floor}층 ${formatForTTS(cur.name)}에서 안내를 시작합니다. `
+          : '';
+        speak(prefix + g.tts);
+      }
+
+      function recalcRoute(resetStep = true, shouldSpeak = false) {
+        st.rawRoute = findShortestPath(st.startId, st.destId);
+        st.route = simplifyRoute(st.rawRoute);
+        if (resetStep) st.step = 0;
+        if (st.step >= st.route.length) st.step = Math.max(0, st.route.length - 1);
+        const cur = st.map.nodes[st.route[st.step] || st.startId];
+        if (cur) st.miniPreviewFloor = cur.floor;
+        updateMinimapFloorTabs();
+        rebuildMinimapSvg(true);
+        updateHud();
+        if (shouldSpeak) announceCurrentStep(true);
+      }
+
+      function updateHud() {
+        const nodes = st.map.nodes;
+        const sN = nodes[st.startId], dN = nodes[st.destId];
+        if (sN && dN) {
+          dom.overlayRouteText.textContent = `${sN.floor}층 ${sN.name} → ${dN.floor}층 ${dN.name}`;
+          dom.hudRouteSummary.textContent = `${sN.floor}F ${sN.name} → ${dN.floor}F ${dN.name}`;
+        }
+
+        const g = getCurrentStepGuidance();
+        const cur = nodes[st.route[st.step]];
+        dom.hudFloorBadge.textContent = cur ? `${cur.floor}F` : '-';
+        dom.hudInstruction.textContent = g.title;
+        renderLandmarkChips(g.chips || []);
+        dom.miniFloorChip.textContent = `${cur ? cur.floor : 1}F 본관`;
+        dom.btnPrevStep.classList.toggle('hidden', st.step <= 0);
+
+        if (g.hintLine1 && (g.kind === 'walk' || g.kind === 'stairs' || g.kind === 'ev')) {
+          dom.nextStepHint.textContent = '';
+          dom.nextStepHint.appendChild(document.createTextNode(g.hintLine1));
+          dom.nextStepHint.appendChild(document.createElement('br'));
+          dom.nextStepHint.appendChild(document.createTextNode(g.hintLine2 || '다음 안내를 시작하세요!'));
+          dom.nextStepHint.classList.remove('hidden');
+        } else {
+          dom.nextStepHint.classList.add('hidden');
+        }
+
+        if (g.kind !== 'arrived' && st.arrivalCelebratedKey) {
+          st.arrivalCelebratedKey = '';
+          stopArrivalConfetti();
+        }
+
+        if (g.kind === 'error') {
+          dom.arArrowFrame.style.display = 'none';
+          dom.arSpecialBox.style.display = 'flex';
+          dom.arSpecialBox.className = 'ar-special-box err';
+          dom.arSpIcon.textContent = '⚠️';
+          dom.arSpTitle.textContent = '경로 미연결';
+          dom.arSpSub.textContent = '편집기에서 복도와 연결하세요';
+          dom.arDirTag.textContent = '경로 없음';
+          dom.arTargetTag.textContent = '';
+          dom.btnNextStep.disabled = true;
+          dom.btnNextLabel.textContent = '경로 없음';
+          dom.btnNextArrow.classList.add('hidden');
+          requestAnimationFrame(syncHudBounds);
+          return;
+        }
+
+        if (g.kind === 'arrived') {
+          dom.arArrowFrame.style.display = 'none';
+          dom.arSpecialBox.style.display = 'flex';
+          dom.arSpecialBox.className = 'ar-special-box arrived';
+          dom.arSpIcon.textContent = '🎉';
+          dom.arSpTitle.textContent = g.title;
+          dom.arSpSub.textContent = '안내가 완료되었습니다';
+          dom.arDirTag.textContent = '도착 완료';
+          dom.arTargetTag.textContent = g.targetTag;
+          dom.btnNextStep.disabled = true;
+          dom.btnNextLabel.textContent = '🎉 도착 완료';
+          dom.btnNextArrow.classList.add('hidden');
+          const arrKey = `${st.startId}_${st.destId}_${st.step}`;
+          if (st.arrivalCelebratedKey !== arrKey) {
+            st.arrivalCelebratedKey = arrKey;
+            launchArrivalConfetti();
+          }
+          requestAnimationFrame(syncHudBounds);
+          return;
+        }
+
+        if (g.kind === 'stairs' || g.kind === 'ev') {
+          const nxt = nodes[st.route[st.step + 1]];
+          dom.arArrowFrame.style.display = 'none';
+          dom.arSpecialBox.style.display = 'flex';
+          dom.arSpecialBox.className = 'ar-special-box' + (g.kind === 'ev' ? ' ev' : '');
+          dom.arSpIcon.textContent = g.kind === 'ev' ? '🛗' : (g.up ? '⬆️' : '⬇️');
+          dom.arSpTitle.textContent = g.title;
+          dom.arSpSub.textContent = `${nxt.floor}층 도착 후 아래 초록색 버튼 터치`;
+          dom.arDirTag.textContent = g.dirTag;
+          dom.arTargetTag.textContent = g.targetTag;
+          dom.btnNextStep.disabled = false;
+          dom.btnNextLabel.textContent = `${nxt.floor}층 도착 · 다음 안내`;
+          dom.btnNextArrow.classList.remove('hidden');
+          requestAnimationFrame(syncHudBounds);
+          return;
+        }
+
+        const nxt = nodes[st.route[st.step + 1]];
+        const rel = getRelAngle(g.walkBearing, getEffectiveHeading());
+        const isStraight = Math.abs(rel) <= STRAIGHT_TOLERANCE_DEG;
+        const liveDir = isStraight ? '직진' : Math.abs(rel) >= 145 ? '뒤로 돌기' : (rel > 0 ? '우회전' : '좌회전');
+
+        st.targetRel = isStraight ? 0 : rel;
+        dom.arArrowFrame.style.display = 'flex';
+        dom.arSpecialBox.style.display = 'none';
+        dom.arDirTag.textContent = liveDir;
+        dom.arTargetTag.textContent = g.targetTag;
+        dom.btnNextStep.disabled = false;
+        dom.btnNextLabel.textContent = `${nxt.name} 도착`;
+        dom.btnNextArrow.classList.remove('hidden');
+        requestAnimationFrame(syncHudBounds);
+      }
+
+      /* =====================================================================
+         10. SVG 벡터 평면도 생성기 (라이트모드 미니맵 + 편집기 공용)
+         ===================================================================== */
+      function svgEl(tag, attrs = {}, text = null) {
+        const el = document.createElementNS(SVG_NS, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+        if (text !== null) el.textContent = text;
+        return el;
+      }
+
+      function buildFloorVectorGroup(floor, opt) {
+        const g = svgEl('g');
+        const customImg = st.map.floors[floor] && st.map.floors[floor].image;
+
+        if (customImg) {
+          g.appendChild(svgEl('image', { href: customImg, x: 0, y: 0, width: MAP_W, height: MAP_H, preserveAspectRatio: 'none' }));
+          g.appendChild(svgEl('rect', { x: 0, y: 0, width: MAP_W, height: MAP_H, fill: 'rgba(255,255,255,0.12)' }));
+        } else {
+          g.appendChild(svgEl('rect', { x: 0, y: 0, width: MAP_W, height: MAP_H, fill: '#f8fafc' }));
+          const plan = FLOOR_PLANS[floor];
+          if (plan) {
+            plan.corridors.forEach((c) => {
+              g.appendChild(svgEl('rect', {
+                x: c.x, y: c.y, width: c.w, height: c.h,
+                fill: '#e2e8f0', stroke: '#64748b', 'stroke-width': 2
+              }));
+            });
+            plan.rooms.forEach((rm) => {
+              const c = ROOM_COLORS[rm.kind] || ROOM_COLORS.special;
+              g.appendChild(svgEl('rect', {
+                x: rm.x, y: rm.y, width: rm.w, height: rm.h, rx: 4,
+                fill: c.f, stroke: c.s, 'stroke-width': 2.2,
+                ...(rm.kind === 'outdoor' ? { 'stroke-dasharray': '7 5' } : {})
+              }));
+              if (rm.kind === 'stairs') {
+                for (let sy = rm.y + 14; sy < rm.y + rm.h - 10; sy += 12) {
+                  g.appendChild(svgEl('line', { x1: rm.x + 6, y1: sy, x2: rm.x + rm.w - 6, y2: sy, stroke: 'rgba(180,83,9,0.42)', 'stroke-width': 1.6 }));
+                }
+              }
+              const cx = rm.x + rm.w / 2, cy = rm.y + rm.h / 2;
+              const fs = rm.w <= 25 ? 10 : rm.w <= 62 ? 12.5 : 15;
+              g.appendChild(svgEl('text', {
+                x: cx, y: cy, fill: c.t, 'font-size': fs, 'font-weight': 800,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'class': 'rot-label', 'data-cx': cx, 'data-cy': cy
+              }, rm.label));
+            });
+            (plan.refs || []).forEach((rf) => {
+              g.appendChild(svgEl('text', {
+                x: rf.x, y: rf.y, fill: '#475569', 'font-size': 13, 'font-weight': 800,
+                'text-anchor': 'middle', 'dominant-baseline': 'middle',
+                'class': 'rot-label', 'data-cx': rf.x, 'data-cy': rf.y
+              }, rf.text));
+            });
+          }
+        }
+
+        if (opt.editor) {
+          st.map.edges.forEach((e) => {
+            const a = st.map.nodes[e.from], b = st.map.nodes[e.to];
+            if (!a || !b || a.floor !== floor || b.floor !== floor) return;
+            g.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'rgba(71,85,105,0.62)', 'stroke-width': 3 }));
+          });
+        }
+
+        if (!opt.editor && st.rawRoute.length > 1) {
+          const curRawIdx = st.rawRoute.indexOf(st.route[st.step]);
+          for (let i = 0; i < st.rawRoute.length - 1; i++) {
+            const a = st.map.nodes[st.rawRoute[i]], b = st.map.nodes[st.rawRoute[i + 1]];
+            if (!a || !b || a.floor !== floor || b.floor !== floor) continue;
+            const passed = curRawIdx > 0 && i < curRawIdx;
+            g.appendChild(svgEl('line', {
+              x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+              stroke: passed ? '#10b981' : '#2563eb',
+              'stroke-opacity': passed ? 0.5 : 0.95,
+              'stroke-width': passed ? 7 : 10, 'stroke-linecap': 'round'
+            }));
+          }
+        }
+
+        Object.values(st.map.nodes).filter((n) => n.floor === floor).forEach((n) => {
+          const isDest = !opt.editor && n.id === st.destId;
+          const isSel = opt.editor && n.id === st.selectedId;
+          const isSrc = opt.editor && n.id === st.connectSrc;
+          if (!opt.editor && !isDest) return;
+
+          if (isSel || isSrc) {
+            g.appendChild(svgEl('circle', {
+              cx: n.x, cy: n.y, r: 21, fill: 'none',
+              stroke: isSrc ? '#059669' : '#2563eb', 'stroke-width': 4.5
+            }));
+          }
+          let fill = '#64748b';
+          if (n.type === 'classroom') fill = '#0284c7';
+          else if (n.type === 'office') fill = '#059669';
+          else if (n.type === 'special') fill = '#7c3aed';
+          else if (n.type === 'restroom') fill = '#db2777';
+          else if (n.type === 'stairs') fill = '#d97706';
+          else if (n.type === 'elevator') fill = '#0891b2';
+          else if (n.type === 'entrance') fill = '#ea580c';
+          else if (n.type === 'outdoor') fill = '#65a30d';
+          if (isDest) fill = '#dc2626';
+
+          const r = isDest ? 14 : (n.type === 'waypoint' ? 6 : 9);
+          g.appendChild(svgEl('circle', { cx: n.x, cy: n.y, r, fill, stroke: '#ffffff', 'stroke-width': 3.5 }));
+
+          if (isDest || (opt.editor && customImg && n.type !== 'waypoint')) {
+            g.appendChild(svgEl('text', {
+              x: n.x, y: n.y - 21, fill: isDest ? '#b91c1c' : '#0f172a', 'font-size': 15, 'font-weight': 900,
+              'text-anchor': 'middle', 'class': 'rot-label', 'data-cx': n.x, 'data-cy': n.y - 21,
+              'paint-order': 'stroke', stroke: '#ffffff', 'stroke-width': 5
+            }, isDest ? `도착:${n.name}` : n.name));
+          }
+        });
+
+        if (opt.editor && st.pendingXY) {
+          g.appendChild(svgEl('circle', {
+            cx: st.pendingXY.x, cy: st.pendingXY.y, r: 14, fill: 'none',
+            stroke: '#059669', 'stroke-width': 4, 'stroke-dasharray': '6 4'
+          }));
+        }
+        return g;
+      }
+
+      /* 플로팅 SVG 미니맵 재빌드 및 60fps 회전 프레임 갱신 */
+      let miniRefs = null;
+      function rebuildMinimapSvg(force = false) {
+        const cur = st.map.nodes[st.route[st.step] || st.startId] || { floor: 1, x: 455, y: 115 };
+        const floor = st.miniExpanded ? st.miniPreviewFloor : cur.floor;
+        const key = `${floor}_${st.miniExpanded}_${st.startId}_${st.destId}_${st.step}_${st.map.floors[floor]?.image ? 1 : 0}`;
+        if (!force && st.svgKey === key) return;
+        st.svgKey = key;
+
+        const svg = dom.minimapSvg;
+        svg.innerHTML = '';
+        svg.setAttribute('viewBox', st.miniExpanded ? '0 0 1000 560' : '0 0 360 360');
+
+        const world = svgEl('g');
+        const floorG = buildFloorVectorGroup(floor, { editor: false });
+        world.appendChild(floorG);
+
+        const userG = svgEl('g');
+        userG.appendChild(svgEl('path', { d: 'M 0 0 L -36 -74 A 82 82 0 0 1 36 -74 Z', fill: 'rgba(16,185,129,0.34)' }));
+        userG.appendChild(svgEl('circle', { cx: 0, cy: 0, r: 21, fill: 'rgba(16,185,129,0.22)' }));
+        userG.appendChild(svgEl('circle', { cx: 0, cy: 0, r: 12.5, fill: '#059669', stroke: '#ffffff', 'stroke-width': 3.5 }));
+        world.appendChild(userG);
+        svg.appendChild(world);
+
+        const navTag = svgEl('text', {
+          x: st.miniExpanded ? 500 : 180, y: st.miniExpanded ? 24 : 22,
+          fill: '#2563eb', 'font-size': st.miniExpanded ? 16 : 14, 'font-weight': 900, 'text-anchor': 'middle',
+          'paint-order': 'stroke', stroke: '#ffffff', 'stroke-width': 4
+        }, '▲ 진행방향');
+        svg.appendChild(navTag);
+
+        miniRefs = { floor, world, userG, navTag, labels: Array.from(floorG.querySelectorAll('.rot-label')) };
+      }
+
+      function updateMinimapFrame() {
+        if (!miniRefs) rebuildMinimapSvg(true);
+        const cur = st.map.nodes[st.route[st.step] || st.startId] || { floor: 1, x: 455, y: 115 };
+        const heading = getEffectiveHeading();
+        const showUser = cur.floor === miniRefs.floor;
+        const headingUp = st.miniHeadingUp && (!st.miniExpanded || showUser);
+        const rot = headingUp ? -heading : 0;
+
+        miniRefs.userG.style.display = showUser ? '' : 'none';
+        if (showUser) {
+          miniRefs.userG.setAttribute('transform', `translate(${cur.x} ${cur.y}) rotate(${heading.toFixed(1)})`);
+        }
+
+        if (st.miniExpanded) {
+          const sc = headingUp ? 0.78 : 0.96;
+          miniRefs.world.setAttribute('transform', `translate(500 295) scale(${sc}) rotate(${rot.toFixed(1)}) translate(-500 -250)`);
+        } else {
+          if (headingUp) {
+            miniRefs.world.setAttribute('transform', `translate(180 180) scale(0.92) rotate(${rot.toFixed(1)}) translate(${-cur.x} ${-cur.y})`);
+          } else {
+            miniRefs.world.setAttribute('transform', 'translate(180 180) scale(0.35) translate(-500 -250)');
+          }
+        }
+
+        const invRot = -rot;
+        for (let i = 0; i < miniRefs.labels.length; i++) {
+          const el = miniRefs.labels[i];
+          if (Math.abs(invRot) < 0.2) el.removeAttribute('transform');
+          else el.setAttribute('transform', `rotate(${invRot.toFixed(1)} ${el.dataset.cx} ${el.dataset.cy})`);
+        }
+        miniRefs.navTag.textContent = headingUp ? '▲ 진행방향' : 'N 북쪽';
+        miniRefs.navTag.setAttribute('fill', headingUp ? '#2563eb' : '#dc2626');
+      }
+
+      function drawEditorSvg() {
+        dom.editorSvg.innerHTML = '';
+        dom.editorSvg.appendChild(buildFloorVectorGroup(st.edFloor, { editor: true }));
+      }
+
+      /* =====================================================================
+         11. 첫 화면 경로 선택기 & 경로 바텀시트 & 편집기 인터랙션
+         ===================================================================== */
+      function fillNodeSelect(sel, val, kw = '') {
+        const visible = Object.values(st.map.nodes).filter((n) => n.type !== 'waypoint');
+        sel.innerHTML = '';
+        [1, 2, 3].forEach((fl) => {
+          const list = visible
+            .filter((n) => n.floor === fl && (!kw || n.name.toLowerCase().includes(kw) || formatForTTS(n.name).includes(kw) || `${fl}층`.includes(kw)))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+          if (!list.length) return;
+          const og = document.createElement('optgroup');
+          og.label = `${fl}층 본관`;
+          list.forEach((n) => {
+            const o = document.createElement('option');
+            o.value = n.id;
+            o.textContent = `${fl}F ${n.name}`;
+            og.appendChild(o);
+          });
+          sel.appendChild(og);
+        });
+        if ([...sel.options].some((o) => o.value === val)) sel.value = val;
+      }
+
+      function syncPrefButtons() {
+        dom.prefBtns.forEach((x) => x.classList.toggle('active', x.dataset.pref === st.verticalPref));
+        dom.overlayPrefBtns.forEach((x) => x.classList.toggle('active', x.dataset.overlayPref === st.verticalPref));
+      }
+
+      function updateOverlayPreview() {
+        const sN = st.map.nodes[dom.overlayStartSel.value];
+        const dN = st.map.nodes[dom.overlayDestSel.value];
+        if (sN && dN) {
+          dom.overlayRouteText.textContent = `${sN.floor}층 ${sN.name} → ${dN.floor}층 ${dN.name}`;
+          dom.btnLaunchAR.textContent = `📷 ${dN.floor}F ${josa(dN.name, '으로', '로')} AR 길안내 시작`;
+        }
+      }
+
+      function populateOverlaySelectors() {
+        fillNodeSelect(dom.overlayStartSel, st.startId);
+        fillNodeSelect(dom.overlayDestSel, st.destId);
+        syncPrefButtons();
+        updateOverlayPreview();
+      }
+
+      function applyOverlaySelection() {
+        if (dom.overlayStartSel.value) st.startId = dom.overlayStartSel.value;
+        if (dom.overlayDestSel.value) st.destId = dom.overlayDestSel.value;
+        const sn = st.map.nodes[st.startId];
+        if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
+          st.simHeading = sn.qrHeading;
+          dom.headingSlider.value = sn.qrHeading;
+          dom.manualDegText.textContent = `${sn.qrHeading}°`;
+        }
+        recalcRoute(true, false);
+      }
+
+      function populateRouteSelectors(filter = '', startVal = st.startId, destVal = st.destId) {
+        const kw = filter.trim().toLowerCase();
+        fillNodeSelect(dom.startSel, startVal, '');
+        fillNodeSelect(dom.destSel, destVal, kw);
+        syncPrefButtons();
+      }
+
+      function openRouteSheet() {
+        let nextStart = st.startId;
+        let nextDest = st.destId;
+        const isArrived = st.route.length > 0 && st.step >= st.route.length - 1;
+        if (isArrived) {
+          const arrivedId = st.route[st.step];
+          if (arrivedId && st.map.nodes[arrivedId]) {
+            nextStart = arrivedId;
+            if (nextDest === arrivedId) {
+              nextDest = arrivedId === '1f_main_ent' ? '1f_admin' : '1f_main_ent';
+            }
+          }
+        }
+        dom.destSearch.value = '';
+        populateRouteSelectors('', nextStart, nextDest);
+        dom.routeSheetBg.classList.add('open');
+        if (isArrived && st.map.nodes[nextStart]) {
+          const n = st.map.nodes[nextStart];
+          toast(`도착한 ${n.floor}층 ${n.name}이(가) 출발지로 설정되었습니다.`, 'ok');
+        }
+      }
+
+      function updateMinimapFloorTabs() {
+        const routeFloors = new Set(st.rawRoute.map((id) => st.map.nodes[id]?.floor));
+        dom.miniFloorTabs.querySelectorAll('.mf-tab').forEach((btn) => {
+          const fl = Number(btn.dataset.mfloor);
+          btn.classList.toggle('active', fl === st.miniPreviewFloor);
+          btn.classList.toggle('has-route', routeFloors.has(fl));
+        });
+      }
+
+      function setMinimapExpanded(expand) {
+        st.miniExpanded = expand;
+        dom.minimapWidget.classList.toggle('expanded', expand);
+        dom.minimapBackdrop.classList.toggle('open', expand);
+        dom.btnMiniExpand.textContent = expand ? '✕' : '⤢';
+        dom.miniExpandHint.textContent = expand ? '탭 축소' : '탭 확대';
+        if (!expand) {
+          const cur = st.map.nodes[st.route[st.step] || st.startId];
+          if (cur) st.miniPreviewFloor = cur.floor;
+        }
+        updateMinimapFloorTabs();
+        rebuildMinimapSvg(true);
+      }
+
+      function setMode(mode) {
+        st.mode = mode;
+        const isNav = mode === 'nav';
+        document.body.className = isNav ? 'mode-nav' : 'mode-editor';
+        dom.viewNav.classList.toggle('hidden', !isNav);
+        dom.viewEditor.classList.toggle('hidden', isNav);
+        if (isNav) {
+          populateOverlaySelectors();
+          populateRouteSelectors();
+          recalcRoute(false, false);
+          requestAnimationFrame(syncHudBounds);
+        } else {
+          setMinimapExpanded(false);
+          updateCalibBadge();
+          drawEditorSvg();
+        }
+      }
+
+      function openEditorGate() {
+        if (st.isAdminAuthed) { setMode('editor'); return; }
+        dom.adminErrMsg.classList.remove('open');
+        dom.adminIdIn.value = '';
+        dom.adminPwIn.value = '';
+        dom.adminModalBg.classList.add('open');
+        setTimeout(() => dom.adminIdIn.focus(), 60);
+      }
+
+      function inspectNode(id) {
+        st.selectedId = id;
+        const n = st.map.nodes[id];
+        if (!n) { dom.inspectPanel.classList.remove('open'); return; }
+        dom.addPanel.classList.remove('open');
+        dom.inspectPanel.classList.add('open');
+        dom.inspectTitle.textContent = `${n.floor}층 ${n.name} (${n.id})`;
+        dom.editNameIn.value = n.name;
+        dom.editTypeIn.value = n.type;
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('start', n.id);
+          u.searchParams.delete('dest');
+          dom.qrUrlIn.value = u.toString();
+        } catch (_) {
+          dom.qrUrlIn.value = `?start=${encodeURIComponent(n.id)}`;
+        }
+      }
+
+      function onEditorSvgClick(e) {
+        const rect = dom.editorSvg.getBoundingClientRect();
+        const mx = Math.max(20, Math.min(MAP_W - 20, ((e.clientX - rect.left) / rect.width) * MAP_W));
+        const my = Math.max(20, Math.min(MAP_H - 20, ((e.clientY - rect.top) / rect.height) * MAP_H));
+
+        let hit = null, minD = 28;
+        Object.values(st.map.nodes).forEach((n) => {
+          if (n.floor !== st.edFloor) return;
+          const d = Math.hypot(n.x - mx, n.y - my);
+          if (d < minD) { minD = d; hit = n; }
+        });
+
+        if (st.edTool === 'select') {
+          inspectNode(hit ? hit.id : null);
+          drawEditorSvg();
+        } else if (st.edTool === 'add') {
+          if (hit) { inspectNode(hit.id); drawEditorSvg(); return; }
+          st.pendingXY = { x: Math.round(mx), y: Math.round(my) };
+          st.selectedId = null;
+          dom.inspectPanel.classList.remove('open');
+          dom.addPanel.classList.add('open');
+          dom.newNameIn.value = '';
+          dom.newNameIn.focus();
+          drawEditorSvg();
+        } else if (st.edTool === 'connect') {
+          if (!hit) { st.connectSrc = null; drawEditorSvg(); return; }
+          if (!st.connectSrc) {
+            st.connectSrc = hit.id;
+            toast(`'${hit.name}' 선택 — 연결/해제할 다음 지점을 누르세요.`);
+          } else if (st.connectSrc === hit.id) {
+            st.connectSrc = null;
+          } else {
+            const src = st.map.nodes[st.connectSrc];
+            const idx = st.map.edges.findIndex((ed) => (ed.from === src.id && ed.to === hit.id) || (ed.from === hit.id && ed.to === src.id));
+            if (idx >= 0) {
+              st.map.edges.splice(idx, 1);
+              toast(`'${src.name}' ↔ '${hit.name}' 연결 해제`);
+            } else {
+              st.map.edges.push({ from: src.id, to: hit.id, distance: Math.max(10, Math.round(Math.hypot(src.x - hit.x, src.y - hit.y))) });
+              toast(`'${src.name}' ↔ '${hit.name}' 연결 완료`, 'ok');
+            }
+            saveMap();
+            st.connectSrc = null;
+          }
+          drawEditorSvg();
+        }
+      }
+
+      /* =====================================================================
+         12. 이벤트 바인딩 (층 배지 5연타 이스터에그 포함)
+         ===================================================================== */
+      function bindEvents() {
+        dom.overlayStartSel.onchange = updateOverlayPreview;
+        dom.overlayDestSel.onchange = updateOverlayPreview;
+        dom.btnOverlaySwap.onclick = () => {
+          const t = dom.overlayStartSel.value;
+          dom.overlayStartSel.value = dom.overlayDestSel.value;
+          dom.overlayDestSel.value = t;
+          updateOverlayPreview();
+        };
+        dom.overlayPrefBtns.forEach((b) => {
+          b.onclick = () => {
+            st.verticalPref = b.dataset.overlayPref;
+            syncPrefButtons();
+          };
+        });
+
+        dom.btnLaunchAR.onclick = () => {
+          if (dom.overlayStartSel.value === dom.overlayDestSel.value) {
+            toast('출발지와 목적지가 같습니다. 다른 목적지를 선택하세요.', 'warn');
+            return;
+          }
+          applyOverlaySelection();
+          launchAR();
+        };
+        dom.focusTapLayer.onclick = onTapToFocus;
+        dom.btnRepeatTts.onclick = () => { unlockTts(); announceCurrentStep(false); };
+        dom.hudRouteTrigger.onclick = openRouteSheet;
+        dom.btnOpenRouteTop.onclick = openRouteSheet;
+
+        // 개발자 편집 모드 이스터에그: 왼쪽 위 층 배지(1F/2F/3F) 5번 연속 터치
+        let floorTapCount = 0;
+        let floorTapTimer = null;
+        dom.hudFloorBadge.onclick = (e) => {
+          e.stopPropagation();
+          floorTapCount++;
+          if (floorTapTimer) clearTimeout(floorTapTimer);
+          if (floorTapCount >= 5) {
+            floorTapCount = 0;
+            openEditorGate();
+          } else {
+            floorTapTimer = setTimeout(() => { floorTapCount = 0; }, 1400);
+          }
+        };
+
+        dom.btnAdminCancel.onclick = () => dom.adminModalBg.classList.remove('open');
+        dom.adminModalBg.onclick = (e) => { if (e.target === dom.adminModalBg) dom.adminModalBg.classList.remove('open'); };
+        dom.adminLoginForm.onsubmit = (e) => {
+          e.preventDefault();
+          const uid = dom.adminIdIn.value.trim();
+          const upw = dom.adminPwIn.value;
+          if (uid === ADMIN_ID && upw === ADMIN_PW) {
+            st.isAdminAuthed = true;
+            try { sessionStorage.setItem('dasu_admin_auth', '1'); } catch (_) {}
+            dom.adminModalBg.classList.remove('open');
+            setMode('editor');
+            toast('관리자 인증 완료 — 편집 모드로 진입합니다.', 'ok');
+          } else {
+            dom.adminErrMsg.classList.add('open');
+            dom.adminPwIn.value = '';
+            dom.adminPwIn.focus();
+          }
+        };
+        dom.btnBackToAR.onclick = () => setMode('nav');
+        dom.btnRetryPerm.onclick = () => { toast('카메라·나침반 센서를 다시 확인합니다...'); launchAR(); };
+        dom.btnCloseDiag.onclick = () => showDiag(null);
+
+        // 하단 컨트롤
+        dom.btnPrevStep.onclick = () => {
+          if (st.step > 0) { st.step--; rebuildMinimapSvg(true); updateHud(); announceCurrentStep(false); }
+        };
+        dom.btnNextStep.onclick = () => {
+          if (st.step >= st.route.length - 1) return;
+          st.step++;
+          const cur = st.map.nodes[st.route[st.step]];
+          if (cur && !st.miniExpanded) st.miniPreviewFloor = cur.floor;
+          rebuildMinimapSvg(true);
+          updateHud();
+          announceCurrentStep(false);
+          if (cur && st.step < st.route.length - 1) {
+            toast(`${cur.floor}층 ${cur.name}`, 'ok');
+          }
+        };
+
+        // 원탭 정면 맞춤
+        dom.btnCalibrate.onclick = () => {
+          const g = getCurrentStepGuidance();
+          if (g.kind !== 'walk') { toast('복도 이동 단계에서 정면을 맞춰주세요.', 'warn'); return; }
+          if (st.hasSensorFix) {
+            st.usingSimSlider = false;
+            st.manualOffset = normDeg(g.walkBearing - st.filteredHeading);
+            st.calibMode = 'manual';
+          } else {
+            st.simHeading = g.walkBearing;
+          }
+          const eff = Math.round(getEffectiveHeading());
+          dom.headingSlider.value = eff;
+          dom.manualDegText.textContent = `${eff}°`;
+          updateCalibBadge();
+          updateHud();
+          toast('현재 정면이 진행 방향에 맞춰졌습니다.', 'ok');
+        };
+
+        dom.btnTestToggle.onclick = () => {
+          dom.testPop.classList.toggle('open');
+          requestAnimationFrame(syncHudBounds);
+        };
+        dom.headingSlider.oninput = (e) => {
+          st.usingSimSlider = true;
+          st.simHeading = Number(e.target.value);
+          dom.manualDegText.textContent = `${st.simHeading}°`;
+          updateCalibBadge();
+          updateHud();
+        };
+        dom.btnUseAutoCompass.onclick = () => {
+          st.usingSimSlider = false;
+          st.calibMode = st.hasSensorFix ? 'auto' : 'idle';
+          updateCalibBadge();
+          updateHud();
+          toast('자동 나침반 모드로 전환했습니다.', 'ok');
+        };
+
+        // 미니맵
+        dom.minimapWidget.onclick = () => setMinimapExpanded(!st.miniExpanded);
+        dom.minimapBackdrop.onclick = () => setMinimapExpanded(false);
+        dom.btnMiniExpand.onclick = (e) => { e.stopPropagation(); setMinimapExpanded(!st.miniExpanded); };
+        dom.btnMiniRotate.onclick = (e) => {
+          e.stopPropagation();
+          st.miniHeadingUp = !st.miniHeadingUp;
+          dom.btnMiniRotate.classList.toggle('active', st.miniHeadingUp);
+          dom.miniModeLabel.textContent = st.miniHeadingUp ? '헤딩업' : '북쪽고정';
+        };
+        dom.miniFloorTabs.querySelectorAll('.mf-tab').forEach((btn) => {
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            st.miniPreviewFloor = Number(btn.dataset.mfloor);
+            updateMinimapFloorTabs();
+            rebuildMinimapSvg(true);
+          };
+        });
+
+        // 경로 선택 바텀시트
+        dom.btnCloseRoute.onclick = () => dom.routeSheetBg.classList.remove('open');
+        dom.routeSheetBg.onclick = (e) => { if (e.target === dom.routeSheetBg) dom.routeSheetBg.classList.remove('open'); };
+        dom.destSearch.oninput = (e) => populateRouteSelectors(e.target.value, dom.startSel.value, dom.destSel.value);
+        dom.prefBtns.forEach((b) => {
+          b.onclick = () => {
+            st.verticalPref = b.dataset.pref;
+            syncPrefButtons();
+          };
+        });
+        dom.btnSwapRoute.onclick = () => {
+          const t = dom.startSel.value; dom.startSel.value = dom.destSel.value; dom.destSel.value = t;
+        };
+        dom.btnApplyRoute.onclick = () => {
+          if (!dom.startSel.value || !dom.destSel.value) return;
+          if (dom.startSel.value === dom.destSel.value) {
+            toast('출발지와 목적지가 같습니다. 다른 목적지를 선택하세요.', 'warn');
+            return;
+          }
+          st.startId = dom.startSel.value;
+          st.destId = dom.destSel.value;
+          const sn = st.map.nodes[st.startId];
+          if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
+            st.simHeading = sn.qrHeading;
+            dom.headingSlider.value = sn.qrHeading;
+            dom.manualDegText.textContent = `${sn.qrHeading}°`;
+          }
+          dom.routeSheetBg.classList.remove('open');
+          recalcRoute(true, dom.startOverlay.classList.contains('hidden'));
+          toast('새 경로로 안내를 시작합니다.', 'ok');
+        };
+
+        // 건물 북쪽 오프셋 보정
+        dom.btnSaveBuildingNorth.onclick = () => {
+          if (!st.hasSensorFix) {
+            requestOrientation();
+            toast('스마트폰 나침반이 활성화된 상태에서 AR 시작 후 눌러주세요.', 'warn');
+            return;
+          }
+          st.map.buildingNorthOffset = Math.round(st.filteredHeading);
+          st.usingSimSlider = false;
+          st.calibMode = 'auto';
+          saveMap();
+          updateCalibBadge();
+          toast(`도면 북쪽 기준(${st.map.buildingNorthOffset}°)이 저장되었습니다.`, 'ok');
+        };
+        dom.btnResetNorthOffset.onclick = () => {
+          st.map.buildingNorthOffset = 0;
+          saveMap();
+          updateCalibBadge();
+          toast('도면 북쪽 오프셋을 0°로 초기화했습니다.');
+        };
+
+        // 편집기 이벤트
+        dom.edFloorBtns.forEach((b) => {
+          b.onclick = () => {
+            st.edFloor = Number(b.dataset.efloor);
+            st.selectedId = null; st.connectSrc = null; st.pendingXY = null;
+            dom.inspectPanel.classList.remove('open'); dom.addPanel.classList.remove('open');
+            dom.edFloorTag.textContent = `${st.edFloor}층 본관 (SVG 1000×500)`;
+            dom.edFloorBtns.forEach((x) => x.classList.toggle('active', x === b));
+            drawEditorSvg();
+          };
+        });
+        dom.toolBtns.forEach((b) => {
+          b.onclick = () => {
+            st.edTool = b.dataset.tool;
+            st.connectSrc = null; st.pendingXY = null;
+            dom.addPanel.classList.remove('open');
+            dom.toolBtns.forEach((x) => x.classList.remove('active', 'active-green'));
+            b.classList.add(st.edTool === 'connect' ? 'active-green' : 'active');
+            dom.edHint.textContent =
+              st.edTool === 'select' ? '지점을 클릭하면 이름/유형 수정, QR 링크 복사, 삭제가 가능합니다.'
+              : st.edTool === 'add' ? '도면의 빈 곳을 클릭해 새 지점을 추가합니다.'
+              : '같은 층의 두 지점을 차례로 클릭해 통로를 연결하거나 해제합니다.';
+            drawEditorSvg();
+          };
+        });
+        dom.editorSvg.onclick = onEditorSvgClick;
+
+        dom.btnSaveEdit.onclick = () => {
+          const n = st.map.nodes[st.selectedId];
+          const nm = dom.editNameIn.value.trim();
+          if (!n || !nm) return;
+          n.name = nm; n.type = dom.editTypeIn.value;
+          saveMap(); inspectNode(n.id); drawEditorSvg();
+          toast('저장되었습니다.', 'ok');
+        };
+        dom.btnDelNode.onclick = () => {
+          const n = st.map.nodes[st.selectedId];
+          if (!n) return;
+          delete st.map.nodes[n.id];
+          st.map.edges = st.map.edges.filter((e) => e.from !== n.id && e.to !== n.id);
+          saveMap(); inspectNode(null); drawEditorSvg();
+          toast(`'${n.name}' 삭제됨`);
+        };
+        dom.btnCopyQr.onclick = () => {
+          dom.qrUrlIn.select();
+          dom.qrUrlIn.setSelectionRange(0, 99999);
+          try { if (document.execCommand('copy')) { toast('QR 진입 URL 복사 완료!', 'ok'); return; } } catch (_) {}
+          toast('링크를 직접 선택해 복사하세요.', 'warn');
+        };
+        dom.btnCancelAdd.onclick = () => { st.pendingXY = null; dom.addPanel.classList.remove('open'); drawEditorSvg(); };
+        dom.btnCommitAdd.onclick = () => {
+          if (!st.pendingXY) return;
+          const nm = dom.newNameIn.value.trim();
+          if (!nm) { toast('지점 이름을 입력하세요.', 'warn'); return; }
+          const id = `${st.edFloor}f_n_${Date.now().toString(36).slice(-4)}`;
+          st.map.nodes[id] = { id, name: nm, floor: st.edFloor, x: st.pendingXY.x, y: st.pendingXY.y, type: dom.newTypeIn.value };
+          st.pendingXY = null; dom.addPanel.classList.remove('open');
+          saveMap(); inspectNode(id); drawEditorSvg();
+          toast(`'${nm}' 추가됨 (🔗 경로 연결로 이어주세요)`, 'ok');
+        };
+
+        // 도면 사진 업로드/제거
+        dom.imgInput.onchange = (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const r = new FileReader();
+          r.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+              const maxW = 1000;
+              let tw = img.naturalWidth, th = img.naturalHeight;
+              if (tw > maxW) { th = Math.round(th * (maxW / tw)); tw = maxW; }
+              const c = document.createElement('canvas');
+              c.width = tw; c.height = th;
+              c.getContext('2d').drawImage(img, 0, 0, tw, th);
+              st.map.floors[st.edFloor].image = c.toDataURL('image/jpeg', 0.72);
+              saveMap(); drawEditorSvg(); rebuildMinimapSvg(true);
+              toast(`${st.edFloor}층 배경 사진 등록 완료`, 'ok');
+            };
+            img.src = r.result;
+          };
+          r.readAsDataURL(file);
+          e.target.value = '';
+        };
+        dom.btnClearImg.onclick = () => {
+          st.map.floors[st.edFloor].image = null;
+          saveMap(); drawEditorSvg(); rebuildMinimapSvg(true);
+          toast(`${st.edFloor}층 기본 SVG 벡터 도면으로 복귀`);
+        };
+
+        // JSON 백업 & 복원
+        dom.btnExport.onclick = () => {
+          const blob = new Blob([JSON.stringify(st.map, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'dasu-main-ar-v6.json';
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          toast('JSON 파일로 내보냈습니다.', 'ok');
+        };
+        dom.jsonIn.onchange = (e) => {
+          const f = e.target.files && e.target.files[0];
+          if (!f) return;
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const p = JSON.parse(r.result);
+              if (!p || !p.nodes || !Array.isArray(p.edges) || !p.floors) throw 0;
+              if (typeof p.buildingNorthOffset !== 'number') p.buildingNorthOffset = 0;
+              st.map = p; saveMap(); inspectNode(null); updateCalibBadge(); drawEditorSvg(); rebuildMinimapSvg(true);
+              toast('JSON 데이터를 불러왔습니다.', 'ok');
+            } catch (_) { toast('올바른 JSON 형식이 아닙니다.', 'err'); }
+          };
+          r.readAsText(f);
+          e.target.value = '';
+        };
+        dom.btnReset.onclick = () => {
+          confirmBox('기본 본관 도면 복원', '저장된 수정 내역을 지우고 김천다수초 본관 1~3층 기본 도면으로 복원할까요?', () => {
+            st.map = createDefaultData();
+            saveMap(); inspectNode(null);
+            st.startId = '1f_main_ent'; st.destId = '1f_admin';
+            updateCalibBadge(); drawEditorSvg(); rebuildMinimapSvg(true);
+            toast('기본 본관 도면으로 복원되었습니다.', 'ok');
+          });
+        };
+
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => syncHudBounds());
+          if (dom.hudTop) ro.observe(dom.hudTop);
+          if (dom.hudBottomLeft) ro.observe(dom.hudBottomLeft);
+        }
+        window.addEventListener('resize', syncHudBounds);
+      }
+
+      /* =====================================================================
+         13. 애니메이션 루프 & 초기화 (?start=노드ID 지원)
+         ===================================================================== */
+      function animateLoop() {
+        if (st.mode === 'nav') {
+          const diff = ((st.targetRel - st.smoothRel + 540) % 360) - 180;
+          st.smoothRel = ((st.smoothRel + diff * 0.22 + 540) % 360) - 180;
+          dom.arArrowSvg.style.transform = `perspective(640px) rotateX(56deg) rotateZ(${st.smoothRel.toFixed(1)}deg)`;
+          updateMinimapFrame();
+        }
+        requestAnimationFrame(animateLoop);
+      }
+
+      window.onload = function () {
+        loadMap();
+        initQrDetector();
+        try { st.isAdminAuthed = sessionStorage.getItem('dasu_admin_auth') === '1'; } catch (_) {}
+        try {
+          const qs = new URLSearchParams(window.location.search);
+          const qStart = qs.get('start');
+          const qDest = qs.get('dest');
+          if (qStart && st.map.nodes[qStart]) {
+            st.startId = qStart;
+            dom.startQrBadge.classList.remove('hidden');
+            const sn = st.map.nodes[qStart];
+            if (typeof sn.qrHeading === 'number') {
+              st.simHeading = sn.qrHeading;
+              dom.headingSlider.value = sn.qrHeading;
+              dom.manualDegText.textContent = `${sn.qrHeading}°`;
+            }
+            toast(`출발지 설정: ${sn.floor}층 ${sn.name}`, 'ok');
+          }
+          if (qDest && st.map.nodes[qDest]) st.destId = qDest;
+          else if (st.startId === st.destId) st.destId = st.startId === '1f_admin' ? '2f_3_1' : '1f_admin';
+        } catch (_) {}
+
+        bindEvents();
+        updateCalibBadge();
+        populateOverlaySelectors();
+        populateRouteSelectors();
+        recalcRoute(true, false);
+        requestAnimationFrame(syncHudBounds);
+        animateLoop();
+      };
+    })();
+  </script>
+</body>
+</html>
