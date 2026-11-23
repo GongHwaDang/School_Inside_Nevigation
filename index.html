@@ -738,7 +738,434 @@
       .btn-next-main { min-height: 46px; font-size: 14.5px; padding: 8px 10px; border-radius: 13px; }
       .thumb-sub-row .btn { min-height: 36px; font-size: 12px; padding: 5px 8px; border-radius: 11px; }
     }
+  
+
+    /* Reapplied visual/accessibility CSS to the user's updated v5 source. */
+    /* =====================================================================
+       VISUAL REDESIGN — muted indoor-map palette, restrained navigation HUD
+       기존 마크업/문구/동작은 유지하고 시각 스타일만 덮어씁니다.
+       ===================================================================== */
+    :root {
+      --bg: #eef1ed;
+      --surface: #ffffff;
+      --surface-2: #f6f7f4;
+      --glass: rgba(255, 255, 255, 0.94);
+      --glass-strong: rgba(255, 255, 255, 0.985);
+      --border: #dce2dc;
+      --border-strong: #c9d2cb;
+      --border-hi: #38836f;
+      --text: #202b28;
+      --text-sub: #40514b;
+      --muted: #75817b;
+      --sky: #287c79;
+      --blue: #287c79;
+      --blue-dark: #1f6763;
+      --indigo: #405f70;
+      --green: #39735f;
+      --green-bright: #4b8a70;
+      --green-dark: #2e624f;
+      --amber: #a87530;
+      --amber-bg: #faf5e9;
+      --red: #b94e45;
+      --red-bg: #fbefed;
+      --shadow-sm: 0 2px 8px rgba(32, 43, 40, 0.08);
+      --shadow-md: 0 8px 22px rgba(32, 43, 40, 0.12);
+      --shadow-lg: 0 18px 46px rgba(32, 43, 40, 0.20);
+      --hud-bottom: calc(154px + var(--safe-top));
+    }
+
+    html, body { background: var(--bg); color: var(--text); }
+    #viewNav { background: #e8ede8; }
+    .ar-grid-bg {
+      background: radial-gradient(ellipse at 50% 44%, #f7f8f4 0%, #e9eee9 70%, #e1e8e2 100%);
+    }
+    .ar-grid-floor {
+      opacity: .28;
+      background: repeating-radial-gradient(circle, rgba(62, 105, 88, .10) 0 1px, transparent 1px 68px),
+                  linear-gradient(rgba(62, 105, 88, .07) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(62, 105, 88, .07) 1px, transparent 1px);
+      background-size: 100% 100%, 56px 56px, 56px 56px;
+    }
+    .ar-vignette {
+      background: linear-gradient(180deg, rgba(22, 35, 31, .12) 0%, transparent 18%, transparent 72%, rgba(22, 35, 31, .23) 100%);
+    }
+
+    .btn {
+      border: 1px solid var(--border-strong);
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      color: var(--text-sub); border-radius: 11px; box-shadow: 0 1px 3px rgba(32,43,40,.07);
+      font-weight: 650;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn-blue, .btn-sky, .btn-cta-blue, .hud-chip-btn.btn-route-emph {
+      background: #287c79; border-color: #287c79; color: #fff; box-shadow: 0 3px 10px rgba(40,124,121,.20);
+    }
+    .btn-green, .btn-cta-green {
+      background: #39735f; border: 1px solid #39735f; color: #fff;
+    }
+    .btn-amber-soft { background: #faf5e9; color: #88612b; border-color: #e8d8b9; }
+    .btn-red { background: var(--red-bg); color: var(--red); border-color: #e8c4bf; }
+    .btn-shimmer::after { display: none; }
+    .btn-cta-green, .btn-cta-blue { animation: none; }
+    @keyframes pulse-green { 0%,100% { box-shadow: 0 3px 10px rgba(57,115,95,.20); } }
+    @keyframes pulse-blue { 0%,100% { box-shadow: 0 3px 10px rgba(40,124,121,.20); } }
+
+    .hud-top {
+      padding: 11px 13px 10px; gap: 8px; border-radius: 15px;
+      background: rgba(250,251,248,.96); border: 1px solid rgba(207,216,208,.95);
+      box-shadow: 0 5px 18px rgba(29,43,37,.14);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    }
+    .floor-badge {
+      background: #287c79; border-radius: 11px; box-shadow: none; font-size: 15px;
+    }
+    .hud-instruction { color: #202b28; letter-spacing: -.025em; }
+    .hud-meta { color: #527166; font-weight: 650; }
+    .landmark-bar { gap: 4px; }
+    .lm-chip { background: #f2f4f0; border: 1px solid #dce2dc; color: #53615a; font-weight: 650; }
+    .lm-chip.cur { background: #e3efea; border-color: #8cb5a3; color: #28634e; }
+    .lm-chip.dest { background: #e7f0e9; border-color: #9bbba5; color: #35654a; }
+    .hud-row-tools { border-top-color: #e2e7e1; }
+    .hud-chip-btn {
+      border: 1px solid #d6ddd7; background: #fff; color: #394943;
+      border-radius: 9px; box-shadow: none; font-weight: 650;
+    }
+    .hud-chip-btn.btn-route-emph { font-weight: 700; }
+
+    .start-overlay { background: rgba(31,43,39,.40); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+    .start-card {
+      border-radius: 20px; background: #fbfcf9; border: 1px solid #d9e0d9;
+      box-shadow: 0 22px 60px rgba(17,31,25,.24); gap: 13px;
+    }
+    .start-badge { background: #e8f0eb; color: #426755; border: 1px solid #d0dfd5; }
+    .start-qr-badge { background: #eaf3ed; color: #3f7255; border-color: #c9dfcf; }
+    .start-title { color: #202b28; letter-spacing: -.035em; }
+    .start-sub { color: #6b7770; }
+    .start-route-box { background: #f1f5f1; border: 1px solid #dce5dd; border-radius: 12px; }
+    .start-route-label { color: #587b69; }
+    .btn-ar-launch { border-radius: 12px; }
+
+    #arArrowSvg {
+      filter: drop-shadow(0 8px 13px rgba(20,42,35,.28)) drop-shadow(0 0 8px rgba(255,255,255,.35));
+    }
+    .ar-guide-pill {
+      background: rgba(250,251,248,.97); border: 1.5px solid #86a99a;
+      box-shadow: 0 5px 16px rgba(20,42,35,.20); gap: 8px;
+    }
+    .ar-dir-tag { color: #39735f; }
+    .ar-target-tag { color: #26342e; }
+    .ar-special-box { border-width: 1.5px; border-radius: 17px; box-shadow: 0 12px 30px rgba(20,42,35,.20); }
+    .ar-special-box.arrived { border-color: #5b9a79; }
+
+    .next-step-hint {
+      background: rgba(250,251,248,.97); border: 1px solid #8fb7a0; color: #365f4c;
+      box-shadow: 0 5px 16px rgba(20,42,35,.13); animation: none;
+    }
+    .next-step-hint::after { border-color: #8fb7a0; }
+    .btn-prev-step { background: rgba(250,251,248,.97); }
+    .btn-next-main { box-shadow: 0 5px 14px rgba(35,85,63,.25); }
+
+    .minimap-backdrop { background: rgba(20,32,28,.38); }
+    .minimap-widget {
+      border: 1px solid rgba(205,215,207,.96); border-radius: 15px;
+      box-shadow: 0 7px 20px rgba(26,41,34,.18); background: rgba(250,251,248,.97);
+    }
+    .minimap-widget.expanded { border: 1.5px solid #8eaa9a; border-radius: 19px; }
+    .mini-chip { border-color: #d6ded7; color: #34463e; box-shadow: 0 1px 4px rgba(32,43,40,.08); }
+    .mini-floor-tabs { background: #f1f4f0; border-color: #dce2dc; }
+    .mf-tab { color: #65726b; }
+    .mf-tab.active { background: #287c79; }
+    .mf-tab.has-route { color: #39735f; }
+    .mini-btn { border-color: #d6ded7; color: #40554a; box-shadow: 0 1px 4px rgba(32,43,40,.08); }
+    .mini-btn.active { border-color: #7ea797; color: #287c79; background: #edf4ef; }
+    .mini-bottom-bar { color: #46564e; }
+
+    .sheet-bg, .modal-bg { background: rgba(25,37,32,.42); backdrop-filter: blur(5px); }
+    .sheet {
+      background: #fbfcf9; border-color: #e0e5df; border-radius: 21px 21px 0 0;
+      box-shadow: 0 -8px 28px rgba(24,39,31,.16);
+    }
+    .sheet-handle { background: #c9d3cb; }
+    select, input[type="text"], input[type="search"], input[type="number"], input[type="password"] {
+      background: #f5f7f3; border: 1px solid #d7dfd8; border-radius: 10px; color: #27362f;
+    }
+    select:focus, input:focus { border-color: #6d9d88; box-shadow: 0 0 0 3px rgba(82,139,112,.12); }
+    .pref-group, .pills { background: #eef2ed; border-color: #dce3dc; }
+    .pref-btn, .pill { color: #5c6b62; }
+    .pref-btn.active, .pill.active { background: #287c79; box-shadow: none; }
+    .pill.active-green { background: #39735f; }
+
+    #viewEditor { background: #eef1ed; }
+    .ed-header { background: rgba(250,251,248,.96); border-bottom-color: #dce2dc; box-shadow: 0 2px 8px rgba(32,43,40,.05); }
+    .ed-card { border-color: #dce2dc; border-radius: 14px; box-shadow: 0 2px 8px rgba(32,43,40,.05); }
+    .ed-svg-box { background: #f6f7f4; border-color: #d2dbd3; border-radius: 11px; }
+    .ed-hint { background: #f5f7f3; border-color: #e1e6e0; }
+    .inline-panel { background: #f5f7f3; border-color: #a5c2b2; }
+    .test-pop { border-color: #b9cfc2; }
+    .test-pop input[type="range"] { accent-color: #287c79; }
+    .toast { border: 1px solid #9db8a8; box-shadow: 0 6px 18px rgba(32,43,40,.14); }
+    .toast.ok { border-color: #91b79e; color: #35654a; background: #eef5ef; }
+    .toast.warn { border-color: #e3c995; color: #805e2b; background: #faf5e9; }
+    .toast.err { border-color: #e4b6b0; color: #91433b; background: #fbefed; }
+    .modal { border-color: #dce2dc; border-radius: 15px; }
+
+    button:focus-visible, [role="button"]:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(40,124,121,.35); outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+
+  
+
+
+    /* Korean-friendly system fonts; prefer modern UI glyphs where installed. */
+    html, body, button, select, input {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕",
+                   "Noto Sans KR", "Noto Sans CJK KR", system-ui, sans-serif;
+      word-break: keep-all;
+    }
+
+    /* The thumb-zone guidance CTA must remain unmistakably green. */
+    .hud-bottom-left .btn-cta-green:not(:disabled),
+    .hud-bottom-left .btn-next-main:not(:disabled) {
+      background: #39735f !important;
+      background-color: #39735f !important;
+      border-color: #2e624f !important;
+      color: #ffffff !important;
+      box-shadow: 0 5px 14px rgba(35, 85, 63, .28) !important;
+    }
+    .hud-bottom-left .btn-cta-green:disabled,
+    .hud-bottom-left .btn-next-main:disabled {
+      background: #8b9991 !important;
+      background-color: #8b9991 !important;
+      border-color: #74827a !important;
+      color: #ffffff !important;
+      animation: none !important;
+    }
+
+    /* =====================================================================
+       MOBILE TOUCH & ACCESSIBILITY PASS — larger targets, safer spacing,
+       readable overlays, clear focus and assistive-technology state cues.
+       No copy, markup, or JavaScript behavior is changed.
+       ===================================================================== */
+    :root {
+      --touch-min: 48px;
+      --touch-gap: 8px;
+      --hud-bottom: calc(164px + var(--safe-top));
+    }
+
+    /* Keep controls comfortably tappable, even when their visible icon is small. */
+    .btn, .hud-chip-btn, .mini-btn, .mf-tab, .pref-btn, .pill {
+      touch-action: manipulation;
+    }
+    .hud-chip-btn { min-height: 44px; padding-inline: 13px; }
+    .mini-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 17px; }
+    .minimap-widget:not(.expanded) .mini-btn { width: 40px; height: 40px; font-size: 16px; }
+    .mf-tab { min-width: 44px; min-height: 44px; padding: 8px 13px; }
+    .pref-btn { min-height: 48px; }
+    .pill { min-height: 44px; padding-inline: 14px; }
+    .btn-swap-mini { min-width: 48px; min-height: 48px; }
+    .btn-prev-step { min-width: 52px; min-height: 52px; }
+    .btn-next-main { min-height: 54px; }
+    .thumb-sub-row { gap: var(--touch-gap); }
+    .thumb-sub-row .btn { min-height: 48px; }
+    .step-nav-row { gap: var(--touch-gap); }
+    .mini-controls { gap: 7px; }
+
+    /* Calm, opaque surfaces keep instructions readable over arbitrary camera views. */
+    .hud-top, .ar-guide-pill, .next-step-hint, .hud-bottom-left .btn,
+    .minimap-widget, .test-pop {
+      background-color: rgba(250, 251, 248, .97);
+      -webkit-backdrop-filter: blur(16px) saturate(110%);
+      backdrop-filter: blur(16px) saturate(110%);
+    }
+    .hud-instruction { font-size: clamp(17px, 4.5vw, 22px); line-height: 1.3; }
+    .hud-meta { font-size: clamp(13px, 3.25vw, 15px); line-height: 1.35; }
+    .ar-dir-tag, .ar-target-tag { font-size: clamp(15px, 4vw, 17px); line-height: 1.3; }
+    .next-step-hint { font-size: 13px; line-height: 1.45; }
+    .label { font-size: 14px; }
+    .mini-chip { font-size: 11.5px; }
+    .mini-bottom-bar { font-size: 11px; }
+
+    /* Allow larger system text and long Korean labels without clipping. */
+    button, select, input { max-width: 100%; }
+    .hud-instruction, .hud-meta, .ar-target-tag, .btn-next-main,
+    .start-title, .start-sub, .label, .ed-hint {
+      overflow-wrap: anywhere;
+    }
+    .hud-row-main, .hud-info { min-width: 0; }
+    .hud-text { min-width: 0; }
+    .landmark-bar { scroll-padding-inline: 8px; overscroll-behavior-x: contain; }
+    .ar-guide-pill { max-width: calc(100vw - 24px); min-height: 48px; }
+    .ar-target-tag { min-width: 0; }
+    select, input[type="text"], input[type="search"], input[type="number"], input[type="password"] {
+      min-height: 48px; font-size: 16px; /* Prevent mobile browser auto-zoom on focus. */
+    }
+    .sheet { padding-left: 20px; padding-right: 20px; }
+
+    /* Visible keyboard focus and explicit status semantics. */
+    :focus-visible {
+      outline: 3px solid #176c68 !important;
+      outline-offset: 3px !important;
+      box-shadow: 0 0 0 2px rgba(250,251,248,.95) !important;
+    }
+    .btn:disabled, button:disabled { opacity: .72; }
+    @media (forced-colors: active) {
+      :focus-visible { outline: 3px solid Highlight !important; }
+      .btn, .hud-chip-btn, .mini-btn, .ar-guide-pill, .next-step-hint {
+        border: 1px solid ButtonText;
+      }
+    }
+
+    @media (max-width: 520px) {
+      :root { --hud-bottom: calc(168px + var(--safe-top)); }
+      .hud-top { padding: 10px 11px; gap: 7px; }
+      .hud-chip-btn { min-height: 44px; height: auto; padding: 7px 10px; white-space: normal; line-height: 1.25; }
+      .hud-actions { gap: 8px; }
+      .minimap-widget:not(.expanded) .mini-btn { width: 40px; height: 40px; }
+      .mini-controls { top: 6px; right: 6px; }
+      .mini-top-left { top: 7px; left: 7px; }
+      .mini-bottom-bar { left: 7px; right: 7px; bottom: 6px; }
+      .hud-bottom-left { left: 12px; width: calc(100vw - 24px); gap: 8px; bottom: calc(12px + var(--safe-bottom)); }
+      .btn-prev-step { min-width: 52px; min-height: 52px; }
+      .btn-next-main { min-height: 54px; font-size: 15px; }
+      .thumb-sub-row .btn { min-height: 48px; font-size: 13px; }
+      .ar-guide-pill { padding: 8px 14px; }
+      .ar-target-tag { white-space: normal; }
+      .landmark-bar { padding-block: 3px; }
+      .lm-chip { min-height: 32px; display: inline-flex; align-items: center; }
+      .mini-floor-tabs { gap: 4px; }
+    }
+
+    @media (max-height: 700px) and (max-width: 520px) {
+      :root { --hud-bottom: calc(148px + var(--safe-top)); }
+      .hud-top { gap: 5px; padding-block: 8px; }
+      .hud-instruction { font-size: clamp(16px, 4.2vw, 19px); }
+      .hud-bottom-left { gap: 6px; }
+      .next-step-hint { padding: 7px 10px; }
+      .thumb-sub-row .btn { min-height: 44px; }
+    }
+
+  
+
+    /* COLOR HIERARCHY PASS — calm map canvas, distinct functional accents. */
+    :root {
+      --map-ink: #202b28;
+      --map-muted: #75817b;
+      --map-blue: #2463d4;
+      --map-blue-deep: #174eaf;
+      --map-green: #16844a;
+      --map-green-deep: #11683a;
+      --map-teal: #087f8c;
+      --map-amber: #a96508;
+      --map-coral: #c94f45;
+    }
+
+    /* Strong, distinct action colors; green remains reserved for next-step CTA. */
+    .hud-bottom-left .btn-cta-green:not(:disabled),
+    .hud-bottom-left .btn-next-main:not(:disabled) {
+      background: #16844a !important;
+      background-color: #16844a !important;
+      border-color: #11683a !important;
+      color: #fff !important;
+      box-shadow: 0 5px 16px rgba(22,132,74,.34) !important;
+    }
+    .hud-bottom-left .btn-cta-green:active,
+    .hud-bottom-left .btn-next-main:active { background-color: #11683a !important; }
+    .btn-cta-blue, .btn-blue, .btn-sky,
+    .hud-chip-btn.btn-route-emph {
+      background: #2463d4 !important;
+      background-color: #2463d4 !important;
+      border-color: #174eaf !important;
+      color: #fff !important;
+      box-shadow: 0 4px 13px rgba(36,99,212,.25);
+    }
+    .btn-cta-blue:active, .btn-blue:active,
+    .hud-chip-btn.btn-route-emph:active { background-color: #174eaf !important; }
+
+    /* Floor and location cues use a separate teal family. */
+    .floor-badge { background: #087f8c !important; box-shadow: 0 3px 10px rgba(8,127,140,.24); }
+    .hud-meta { color: #087f8c; }
+    .lm-chip.cur { background: #e2f2f3; border-color: #73b9bd; color: #076d77; }
+    .mini-btn.active { color: #087f8c; border-color: #68b5bb; background: #e5f3f3; }
+    .mf-tab.active { background: #087f8c; color: #fff; }
+
+    /* Reserve amber for calibration/warnings; coral for errors only. */
+    .btn-amber-soft { background: #fff4df; color: #8f5708; border-color: #e4bb72; }
+    .diag-banner.warn, .toast.warn { background: #fff4df; border-color: #e4bb72; color: #80500b; }
+    .btn-red, .toast.err { background: #fff0ee; border-color: #e2a39c; color: #a93d35; }
+    .diag-banner { background: #fff0ee; border-color: #e2a39c; color: #a93d35; }
+
+    /* Secondary route and state chips regain enough chroma to scan quickly. */
+    .lm-chip.dest { background: #e6f3e8; border-color: #82bb8d; color: #256b39; }
+    .start-badge { background: #e6f1f8; border-color: #c3d9eb; color: #315f80; }
+    .start-route-box { background: #edf4fb; border-color: #cbdcf0; }
+    .start-route-label { color: #2463a7; }
+    .ar-dir-tag { color: #16844a; }
+    .ar-guide-pill { border-color: #6e9fbf; }
+    .next-step-hint { background: rgba(247,252,247,.98); border-color: #78b68c; color: #24643a; }
+    .next-step-hint::after { border-color: #78b68c; }
+
+    .pref-btn.active, .pill.active { background: #2463d4; color: #fff; }
+    .pill.active-green { background: #16844a; color: #fff; }
+    .btn-green { background: #16844a; border-color: #11683a; color: #fff; }
+    .calib-badge.auto { background: #e6f3e8; border-color: #a8d0b0; color: #256b39; }
+
+    @media (prefers-contrast: more) {
+      .hud-meta, .ar-dir-tag, .start-route-label { color: #075b61; }
+      .lm-chip.cur, .lm-chip.dest, .start-route-box, .next-step-hint { border-width: 2px; }
+    }
+  
+
+    /* Readable Korean typography with a real webfont and reliable fallbacks. */
+    html, body, button, select, input {
+      font-family: "Noto Sans KR", "Pretendard", "Apple SD Gothic Neo",
+                   "Malgun Gothic", "맑은 고딕", system-ui, sans-serif !important;
+    }
+    body { line-height: 1.48; }
+    button, select, input { font-weight: 500; }
+    .hud-instruction, .start-title, .ar-sp-title, .ed-header strong,
+    .btn-cta-green, .btn-cta-blue, .btn-next-main { font-weight: 700; }
+
+    /* Soft tactile response on press; gentle lift on hover-capable devices. */
+    button, .btn, .hud-chip-btn, .mini-btn, .mf-tab, .pref-btn, .pill {
+      transition: transform 160ms cubic-bezier(.2,.75,.25,1),
+                  box-shadow 180ms ease, background-color 180ms ease,
+                  border-color 180ms ease, filter 180ms ease;
+      transform-origin: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      button:not(:disabled):hover, .btn:not(:disabled):hover,
+      .hud-chip-btn:hover, .mini-btn:hover, .mf-tab:hover,
+      .pref-btn:hover, .pill:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.035);
+      }
+    }
+    button:not(:disabled):active, .btn:not(:disabled):active,
+    .hud-chip-btn:active, .mini-btn:active, .mf-tab:active,
+    .pref-btn:active, .pill:active {
+      transform: scale(.97);
+      filter: brightness(.96);
+      transition-duration: 90ms;
+    }
+    button:disabled { transition: none; }
+    @media (prefers-reduced-motion: reduce) {
+      button, .btn, .hud-chip-btn, .mini-btn, .mf-tab, .pref-btn, .pill {
+        transition: none !important;
+      }
+      button:not(:disabled):active, .btn:not(:disabled):active,
+      .hud-chip-btn:active, .mini-btn:active, .mf-tab:active,
+      .pref-btn:active, .pill:active { transform: none !important; }
+    }
+
   </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 </head>
 <body class="mode-nav">
   <!-- ===================================================================
@@ -1133,10 +1560,8 @@
       const MAP_W = 1000;
       const MAP_H = 500;
       const CORRIDOR_Y = 250;
-      // 네이버 클로바 보이스(CLOVA Voice) Netlify Function 프록시 설정
-      // netlify/functions/clova-tts.js 배포 시 자동 사용, 미배포 시 내장 한국어 TTS로 자동 폴백
-      const CLOVA_TTS_URL = '/.netlify/functions/clova-tts';
-      const CLOVA_SPEAKER = 'nara';
+      // 한국어 TTS 말하기 속도 (원본 1.03에서 속도만 살짝 낮춤)
+      const TTS_RATE = 0.96;
 
       /* =====================================================================
          1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
@@ -1506,14 +1931,8 @@
       function getBearing(a, b) { return normDeg((Math.atan2(b.x - a.x, -(b.y - a.y)) * 180) / Math.PI); }
 
       /* =====================================================================
-         5. 한국어 내비게이션 TTS (네이버 클로바 보이스 우선 + 기기 내장 TTS 자동 폴백)
+         5. 한국어 내비게이션 TTS (기존 안내 원문 그대로, 속도만 조절)
          ===================================================================== */
-      const ttsAudio = new Audio();
-      ttsAudio.preload = 'auto';
-      const clovaCache = new Map();
-      let clovaAvailable = Boolean(CLOVA_TTS_URL);
-      let ttsReqSeq = 0;
-
       function pickKoreanVoice() {
         if (!('speechSynthesis' in window)) return;
         const voices = window.speechSynthesis.getVoices() || [];
@@ -1527,16 +1946,6 @@
       }
 
       function unlockTts() {
-        try {
-          // 모바일 자동재생 정책 해제용 무음 WAV 1회 재생
-          if (!ttsAudio.dataset.unlocked) {
-            ttsAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-            const p = ttsAudio.play();
-            if (p && typeof p.then === 'function') {
-              p.then(() => { ttsAudio.pause(); ttsAudio.dataset.unlocked = '1'; }).catch(() => {});
-            }
-          }
-        } catch (_) {}
         if (!('speechSynthesis' in window)) return;
         try {
           pickKoreanVoice();
@@ -1546,62 +1955,17 @@
         } catch (_) {}
       }
 
-      function speakWebSpeech(spoken) {
-        if (!spoken || !('speechSynthesis' in window)) return;
+      function speak(text) {
+        if (!text || !('speechSynthesis' in window)) return;
         try {
+          const spoken = formatForTTS(text);
           pickKoreanVoice();
           window.speechSynthesis.cancel();
           const u = new SpeechSynthesisUtterance(spoken);
-          u.lang = 'ko-KR'; u.rate = 1.0; u.pitch = 1.0;
+          u.lang = 'ko-KR'; u.rate = TTS_RATE; u.pitch = 1.0;
           if (st.koVoice) u.voice = st.koVoice;
           window.speechSynthesis.speak(u);
         } catch (_) {}
-      }
-
-      async function speak(text) {
-        if (!text) return;
-        const spoken = formatForTTS(text);
-        const seq = ++ttsReqSeq;
-
-        try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (_) {}
-        if ('speechSynthesis' in window) {
-          try { window.speechSynthesis.cancel(); } catch (_) {}
-        }
-
-        if (clovaAvailable) {
-          try {
-            let audioUrl = clovaCache.get(spoken);
-            if (!audioUrl) {
-              const res = await fetch(CLOVA_TTS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: spoken, speaker: CLOVA_SPEAKER })
-              });
-              const ctype = (res.headers.get('content-type') || '').toLowerCase();
-              if (!res.ok || !ctype.includes('audio')) {
-                if (res.status === 404 || res.status === 405 || res.status === 501 || !ctype.includes('audio')) {
-                  clovaAvailable = false;
-                }
-                throw new Error('CLOVA_UNAVAILABLE');
-              }
-              const blob = await res.blob();
-              audioUrl = URL.createObjectURL(blob);
-              if (clovaCache.size > 40) {
-                const firstKey = clovaCache.keys().next().value;
-                URL.revokeObjectURL(clovaCache.get(firstKey));
-                clovaCache.delete(firstKey);
-              }
-              clovaCache.set(spoken, audioUrl);
-            }
-            if (seq !== ttsReqSeq) return;
-            ttsAudio.src = audioUrl;
-            await ttsAudio.play();
-            return;
-          } catch (_) {
-            if (seq !== ttsReqSeq) return;
-          }
-        }
-        speakWebSpeech(spoken);
       }
 
       if ('speechSynthesis' in window) {
@@ -2749,6 +3113,7 @@
           recalcRoute(false, false);
           requestAnimationFrame(syncHudBounds);
         } else {
+          if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch (_) {} }
           setMinimapExpanded(false);
           updateCalibBadge();
           drawEditorSvg();
