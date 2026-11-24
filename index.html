@@ -1216,14 +1216,21 @@
         font-size: 11.5px;
       }
     }
-    .preset-copy-box {
+    .start-door-tip {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       gap: 6px;
-      padding: 10px 12px;
+      padding: 9px 12px;
       border-radius: 12px;
-      background: #f1f5f1;
-      border: 1px solid #cbd9ce;
+      background: #fff8e8;
+      border: 1.5px solid #e4bb72;
+      color: #7c4a08;
+      font-size: 12.5px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-align: center;
+      word-break: keep-all;
     }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1310,6 +1317,10 @@
         <div class="start-route-box">
           <span class="start-route-label">선택된 안내 경로</span>
           <div id="overlayRouteText" class="start-route-text">1층 중앙현관 → 1층 행정실</div>
+        </div>
+
+        <div id="startDoorTip" class="start-door-tip" role="note">
+          🚪 중앙현관 안쪽(복도 방향)을 바라본 상태에서 시작하세요.
         </div>
 
         <button id="btnLaunchAR" type="button" class="btn btn-cta-blue btn-shimmer btn-ar-launch">
@@ -1421,6 +1432,10 @@
         </div>
       </div>
 
+      <div id="routeDoorTip" class="start-door-tip" role="note">
+        🚪 출발 위치의 출입문(복도) 쪽을 바라본 상태에서 시작하세요.
+      </div>
+
       <div class="row">
         <button id="btnSwapRoute" type="button" class="btn btn-sm">⇅ 바꾸기</button>
         <button id="btnApplyRoute" type="button" class="btn btn-cta-blue btn-shimmer" style="flex:1; min-height:48px; font-size:15px;">이 경로로 AR 안내 시작</button>
@@ -1435,7 +1450,7 @@
     <header class="ed-header">
       <div>
         <div style="font-size:16px; font-weight:900; color:#0f172a;">🗺️ 김천다수초 본관 도면 편집기</div>
-        <div style="font-size:12px; color:#64748b; font-weight:600;">1~3층 도면 편집 · 자동 나침반 북쪽 기준 보정 · QR URL · JSON 백업</div>
+        <div style="font-size:12px; color:#64748b; font-weight:600;">1~3층 도면 편집 · 출입문 기준 자이로 추적 · QR URL · JSON 백업</div>
       </div>
       <button id="btnBackToAR" type="button" class="btn btn-blue btn-sm">◀ AR 길안내</button>
     </header>
@@ -1444,29 +1459,16 @@
       <div class="ed-card">
         <div class="row-between">
           <div>
-            <strong style="font-size:14.5px; color:#047857;">🧭 자동 나침반 영점 설정 (건물 도면 북쪽 기준)</strong>
+            <strong style="font-size:14.5px; color:#047857;">🧭 출입문 기준 자동 시작 + 자이로 추적 모드 (전 브라우저 통일)</strong>
             <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
-              복도에서 도면 위쪽(1층 행정실·교무실 방향)을 정면으로 바라보고 버튼을 누르면 실제 진북과의 각도 차이를 저장합니다.
+              실내 철근·자석 간섭을 막기 위해 지자기 나침반을 끄고, 북쪽 실은 남쪽(180°)·남쪽 실은 북쪽(0°)으로 자동 시작 후 자이로로 회전을 추적합니다.
             </div>
           </div>
-          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 49°</span>
+          <span id="gyroModeBadge" class="calib-badge auto" style="font-size:12.5px;">지자기 미사용 · 자이로</span>
         </div>
         <div class="row">
-          <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
-          <button id="btnResetNorthOffset" type="button" class="btn btn-sm">프리셋 초기화</button>
-          <span id="liveCompassText" style="font-size:12.5px; color:#0284c7; font-weight:800;">실시간 나침반: 대기 중</span>
-        </div>
-        <div class="row" style="align-items:center;">
-          <label for="manualNorthIn" style="font-size:12.5px; font-weight:700; color:#334155;">📐 나침반 앱 각도 직접 입력 (0~359°):</label>
-          <input type="number" id="manualNorthIn" min="0" max="359" step="1" placeholder="예: 35" style="width:110px; min-height:38px; padding:6px 10px; font-size:14px;" />
-          <button id="btnApplyManualNorth" type="button" class="btn btn-blue btn-sm">각도 적용</button>
-        </div>
-        <div class="preset-copy-box">
-          <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
-          <div class="row">
-            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 49;" />
-            <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
-          </div>
+          <button id="btnRestartGyro" type="button" class="btn btn-green btn-sm">🔄 자이로 센서 다시 연결</button>
+          <span id="liveCompassText" style="font-size:12.5px; color:#0284c7; font-weight:800;">자이로 센서: 대기 중</span>
         </div>
       </div>
 
@@ -1838,19 +1840,13 @@
         stream: null,
         rearDevices: [],
         lensIdx: 0,
-        compassRaw: null,
-        lastRelGyroHeading: null,
-        absSensor: null,
-        sensorSource: 'none',    // 'none' | 'AbsoluteOrientationSensor' | 'deviceorientationabsolute' | 'webkitCompass' | 'relative'
-        sensorType: 'none',      // 'none' | 'absolute' | 'relative'
+        relSensor: null,
+        sensorSource: 'none',    // 'none' | 'RelativeSensor' | 'DeviceOrientation'
         sensorErr: '',
-        magPermState: '',
-        relNoticeShown: false,
         entryQrHeading: null,
-        hasAbsoluteFix: false,
-        filteredHeading: 180,
+        filteredHeading: 0,
         hasSensorFix: false,
-        calibMode: 'idle',
+        calibMode: 'auto-exit',
         manualOffset: 0,
         simHeading: 180,
         usingSimSlider: false,
@@ -1890,6 +1886,8 @@
         overlayDestSel: $('overlayDestSel'),
         overlayPrefBtns: document.querySelectorAll('[data-overlay-pref]'),
         overlayRouteText: $('overlayRouteText'),
+        startDoorTip: $('startDoorTip'),
+        routeDoorTip: $('routeDoorTip'),
         btnLaunchAR: $('btnLaunchAR'),
         arArrowFrame: $('arArrowFrame'), arArrowSvg: $('arArrowSvg'),
         arSpecialBox: $('arSpecialBox'), arSpIcon: $('arSpIcon'), arSpTitle: $('arSpTitle'), arSpSub: $('arSpSub'),
@@ -1904,10 +1902,8 @@
         routeSheetBg: $('routeSheetBg'), btnCloseRoute: $('btnCloseRoute'), destSearch: $('destSearch'),
         startSel: $('startSel'), destSel: $('destSel'),
         prefBtns: document.querySelectorAll('[data-pref]'), btnSwapRoute: $('btnSwapRoute'), btnApplyRoute: $('btnApplyRoute'),
-        btnBackToAR: $('btnBackToAR'), northOffsetBadge: $('northOffsetBadge'),
-        btnSaveBuildingNorth: $('btnSaveBuildingNorth'), btnResetNorthOffset: $('btnResetNorthOffset'), liveCompassText: $('liveCompassText'),
-        northPresetCodeIn: $('northPresetCodeIn'), btnCopyNorthPreset: $('btnCopyNorthPreset'),
-        manualNorthIn: $('manualNorthIn'), btnApplyManualNorth: $('btnApplyManualNorth'),
+        btnBackToAR: $('btnBackToAR'), gyroModeBadge: $('gyroModeBadge'),
+        btnRestartGyro: $('btnRestartGyro'), liveCompassText: $('liveCompassText'),
         edFloorBtns: document.querySelectorAll('[data-efloor]'), toolBtns: document.querySelectorAll('[data-tool]'),
         imgInput: $('imgInput'), btnClearImg: $('btnClearImg'), edFloorTag: $('edFloorTag'), edHint: $('edHint'), editorSvg: $('editorSvg'),
         inspectPanel: $('inspectPanel'), inspectTitle: $('inspectTitle'),
@@ -2166,7 +2162,7 @@
       }
 
       /* =====================================================================
-         7. 절대 나침반(기울기 보정 3D 후면 카메라 기준) + QR 자동 보정 + 정면 맞춤
+         7. 전 브라우저 통일: 출입문 기준 자동 시작 + 순수 자이로 회전 추적 (지자기 미사용)
          ===================================================================== */
       function getScreenAngle() {
         if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
@@ -2180,44 +2176,6 @@
         return dirs[Math.round(normDeg(deg) / 45) % 8];
       }
 
-      /* W3C 3D 회전행렬 기반 기울기 보정 나침반 헤딩 추출
-         - AR처럼 폰을 세워 들었을 때(beta≈70~110°) 후면 카메라(-Z축) 방향을 사용해 짐벌락·180° 튐 차단
-         - 폰을 바닥과 평행하게 눕혔을 때(|beta|<17°)는 화면 상단(+Y축) 방향 사용 */
-      function extractCompassHeading(ev) {
-        if (typeof ev.webkitCompassHeading === 'number' && !Number.isNaN(ev.webkitCompassHeading)) {
-          return { heading: normDeg(ev.webkitCompassHeading + getScreenAngle()), isAbsolute: true };
-        }
-        if (typeof ev.alpha !== 'number' || Number.isNaN(ev.alpha)) return null;
-
-        const isAbs = ev.type === 'deviceorientationabsolute' || ev.absolute === true;
-        const hasTilt =
-          typeof ev.beta === 'number' && !Number.isNaN(ev.beta) &&
-          typeof ev.gamma === 'number' && !Number.isNaN(ev.gamma);
-
-        let heading;
-        if (hasTilt) {
-          const degToRad = Math.PI / 180;
-          const a = ev.alpha * degToRad;
-          const b = ev.beta * degToRad;
-          const g = ev.gamma * degToRad;
-          const ca = Math.cos(a), sa = Math.sin(a);
-          const sb = Math.sin(b);
-          const cg = Math.cos(g), sg = Math.sin(g);
-
-          // 후면 카메라(-Z)의 세계 좌표계(East, North) 수평 투영 벡터
-          const camEast  = -(ca * sg + sa * sb * cg);
-          const camNorth =  (ca * sb * cg - sa * sg);
-          if (Math.hypot(camEast, camNorth) >= 0.3) {
-            heading = normDeg((Math.atan2(camEast, camNorth) * 180) / Math.PI);
-          } else {
-            heading = normDeg(360 - ev.alpha + getScreenAngle());
-          }
-        } else {
-          heading = normDeg(360 - ev.alpha + getScreenAngle());
-        }
-        return { heading, isAbsolute: isAbs };
-      }
-
       /* 출발지/층도착 지점의 출입문 기준 시작 방위각 계산
          - 도면 북쪽 위치(교무실·행정실·교장실·중앙현관·서쪽계단 등, y < 250): 복도 쪽 남쪽(180°)
          - 도면 남쪽 위치(3-1·도움반·중앙계단·E/V·식당·도서관·과학실 등, y >= 250): 복도 쪽 북쪽(0°)
@@ -2228,87 +2186,19 @@
         return node.y < CORRIDOR_Y ? 180 : 0;
       }
 
-      /* 절대 나침반 미수신(크롬 등 상대 자이로) 환경에서 출입문 기준 방향으로 자동 정렬
-         - 삼성 인터넷 등 절대 나침반 정상 기기에는 간섭하지 않음 */
-      function alignHeadingToNodeExit(node, modeTag = 'auto-exit') {
-        if (!node) return;
-        const exitH = getNodeExitHeading(node);
-        st.simHeading = exitH;
-        if (!st.hasAbsoluteFix && st.hasSensorFix) {
-          st.manualOffset = normDeg(exitH - st.filteredHeading);
-          st.calibMode = modeTag;
-          st.usingSimSlider = false;
+      /* 시작 화면·경로 변경 시트에 표시할 출발지별 출입문 방향 안내 문구 */
+      function getDoorTipText(node) {
+        if (!node) return '🚪 출발 위치의 출입문(복도) 쪽을 바라본 상태에서 시작하세요.';
+        if (node.type === 'entrance') {
+          return `🚪 ${node.name} 안쪽(복도 방향)을 바라본 상태에서 시작하세요.`;
         }
+        if (node.type === 'stairs' || node.type === 'elevator') {
+          return `🚪 ${node.name} 출구(복도 방향)를 바라본 상태에서 시작하세요.`;
+        }
+        return `🚪 ${node.name} 출입문(복도) 쪽을 바라본 상태에서 시작하세요.`;
       }
 
-      function getEffectiveHeading() {
-        if (st.usingSimSlider || !st.hasSensorFix) return normDeg(st.simHeading);
-        if (st.calibMode === 'qr' || st.calibMode === 'manual' || st.calibMode === 'auto-exit') {
-          return normDeg(st.filteredHeading + st.manualOffset);
-        }
-        return normDeg(st.filteredHeading - (Number(st.map.buildingNorthOffset) || 0));
-      }
-
-      function updateCalibBadge() {
-        const deg = Math.round(Number(st.map.buildingNorthOffset) || 0);
-        dom.northOffsetBadge.textContent = `북쪽 오프셋: ${deg}°`;
-        if (dom.northPresetCodeIn) {
-          dom.northPresetCodeIn.value = `const DEFAULT_BUILDING_NORTH_OFFSET = ${deg};`;
-        }
-        if (dom.manualNorthIn && document.activeElement !== dom.manualNorthIn) {
-          dom.manualNorthIn.value = deg;
-        }
-        if (!st.hasSensorFix) {
-          dom.liveCompassText.textContent = '실시간 나침반: 센서 대기 중';
-          return;
-        }
-        const eff = Math.round(getEffectiveHeading());
-        const raw = Math.round(st.filteredHeading);
-        if (st.sensorType === 'absolute') {
-          dom.liveCompassText.textContent = `절대 나침반(${st.sensorSource}): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
-        } else {
-          const diagParts = [];
-          if (st.calibMode === 'auto-exit') diagParts.push('출입문기준 자동');
-          if (st.sensorErr) diagParts.push(st.sensorErr);
-          if (st.magPermState) diagParts.push(`mag:${st.magPermState}`);
-          const errTag = diagParts.length ? ` [${diagParts.join(', ')}]` : '';
-          dom.liveCompassText.textContent = `상대 자이로(${errTag ? errTag.slice(2, -1) : '절대 나침반 미수신'}): 시선 ${eff}° (${getCardinalKo(eff)})`;
-        }
-      }
-
-      /* 공통 절대 나침반 갱신기 (AbsoluteOrientationSensor / deviceorientationabsolute / iOS 공용) */
-      function applyAbsoluteHeading(heading, sourceName) {
-        if (typeof heading !== 'number' || Number.isNaN(heading)) return;
-        const h = normDeg(heading);
-
-        if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
-        window.removeEventListener('deviceorientation', onFallbackOrientation, false);
-
-        st.compassRaw = h;
-        if (!st.hasAbsoluteFix) {
-          st.filteredHeading = h;
-          st.hasAbsoluteFix = true;
-          st.hasSensorFix = true;
-          st.sensorType = 'absolute';
-          st.sensorSource = sourceName;
-          // 절대 나침반 수신 시 임시 출입문 기준 보정(auto-exit)을 해제하고 실제 진북 나침반으로 전환
-          if (st.calibMode === 'idle' || st.calibMode === 'auto-exit') {
-            st.manualOffset = 0;
-            st.calibMode = 'auto';
-          }
-        } else {
-          st.sensorSource = sourceName;
-          const diff = getRelAngle(h, st.filteredHeading);
-          if (Math.abs(diff) >= 0.35) {
-            const weight = Math.abs(diff) > 25 ? 0.3 : 0.2;
-            st.filteredHeading = normDeg(st.filteredHeading + diff * weight);
-          }
-        }
-        updateCalibBadge();
-        updateHud();
-      }
-
-      /* W3C AbsoluteOrientationSensor 쿼터니언 [x, y, z, w] -> 후면 카메라 나침반 각도 */
+      /* W3C RelativeOrientationSensor 쿼터니언 [x, y, z, w] -> 후면 카메라 기준 연속 회전각(지자기 미사용) */
       function headingFromQuaternion(q) {
         if (!q || q.length < 4) return null;
         const [x, y, z, w] = q;
@@ -2322,41 +2212,105 @@
         return normDeg((Math.atan2(topEast, topNorth) * 180) / Math.PI + getScreenAngle());
       }
 
-      function stopAbsoluteSensor() {
-        if (st.absSensor) {
-          try { st.absSensor.stop(); } catch (_) {}
-          st.absSensor = null;
+      /* DeviceOrientation(alpha/beta/gamma) -> 기울기 보정 순수 자이로 회전각 (iOS webkitCompassHeading 의도적 무시) */
+      function extractGyroHeading(ev) {
+        if (typeof ev.alpha !== 'number' || Number.isNaN(ev.alpha)) return null;
+        const hasTilt =
+          typeof ev.beta === 'number' && !Number.isNaN(ev.beta) &&
+          typeof ev.gamma === 'number' && !Number.isNaN(ev.gamma);
+
+        if (hasTilt) {
+          const degToRad = Math.PI / 180;
+          const a = ev.alpha * degToRad;
+          const b = ev.beta * degToRad;
+          const g = ev.gamma * degToRad;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          const sb = Math.sin(b);
+          const cg = Math.cos(g), sg = Math.sin(g);
+
+          const camEast  = -(ca * sg + sa * sb * cg);
+          const camNorth =  (ca * sb * cg - sa * sg);
+          if (Math.hypot(camEast, camNorth) >= 0.3) {
+            return normDeg((Math.atan2(camEast, camNorth) * 180) / Math.PI);
+          }
+        }
+        return normDeg(360 - ev.alpha + getScreenAngle());
+      }
+
+      /* 모든 브라우저 공통: 출발지/층이동 시 출입문 기준 방위(북/남)로 자이로 영점 자동 정렬 */
+      function alignHeadingToNodeExit(node, modeTag = 'auto-exit') {
+        if (!node) return;
+        const exitH = getNodeExitHeading(node);
+        st.simHeading = exitH;
+        st.usingSimSlider = false;
+        st.calibMode = modeTag;
+        if (st.hasSensorFix) {
+          st.manualOffset = normDeg(exitH - st.filteredHeading);
         }
       }
 
-      /* 브라우저 지자기(magnetometer) 권한 상태 비동기 확인 (진단용) */
-      function probeMagnetometerPermission() {
-        if (!navigator.permissions || typeof navigator.permissions.query !== 'function') return;
-        try {
-          navigator.permissions.query({ name: 'magnetometer' })
-            .then((res) => {
-              if (res && res.state) {
-                st.magPermState = res.state;
-                updateCalibBadge();
-              }
-            })
-            .catch(() => {});
-        } catch (_) {}
+      function getEffectiveHeading() {
+        if (st.usingSimSlider || !st.hasSensorFix) return normDeg(st.simHeading);
+        return normDeg(st.filteredHeading + st.manualOffset);
       }
 
-      /* 1순위: Chrome Generic Sensor API (AbsoluteOrientationSensor) */
-      function tryStartAbsoluteSensor() {
-        stopAbsoluteSensor();
-        if (typeof window.AbsoluteOrientationSensor !== 'function') {
-          st.sensorErr = 'NoAbsAPI';
-          return false;
+      function updateCalibBadge() {
+        if (!dom.liveCompassText) return;
+        if (!st.hasSensorFix) {
+          const errTag = st.sensorErr ? ` (${st.sensorErr})` : '';
+          dom.liveCompassText.textContent = `자이로 센서: 대기 중${errTag}`;
+          return;
         }
+        const eff = Math.round(getEffectiveHeading());
+        dom.liveCompassText.textContent = `자이로 활성(${st.sensorSource}): 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
+      }
+
+      /* 공통 자이로 헤딩 갱신기 (RelativeOrientationSensor / deviceorientation 공용) */
+      function applyGyroHeading(rawHeading, sourceName) {
+        if (typeof rawHeading !== 'number' || Number.isNaN(rawHeading)) return;
+        const h = normDeg(rawHeading);
+
+        if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
+        st.sensorSource = sourceName;
+
+        if (!st.hasSensorFix) {
+          st.filteredHeading = h;
+          st.hasSensorFix = true;
+          const curNode = st.map.nodes[st.route[st.step] || st.startId];
+          const initHeading = typeof st.entryQrHeading === 'number'
+            ? st.entryQrHeading
+            : getNodeExitHeading(curNode);
+          st.manualOffset = normDeg(initHeading - h);
+          st.simHeading = initHeading;
+          st.calibMode = typeof st.entryQrHeading === 'number' ? 'qr' : 'auto-exit';
+        } else {
+          const diff = getRelAngle(h, st.filteredHeading);
+          // 데드밴드 없이 미세 회전도 자연스럽게 누적 (천천히 돌아도 각도 누락 없음)
+          const weight = Math.abs(diff) > 20 ? 0.45 : 0.28;
+          st.filteredHeading = normDeg(st.filteredHeading + diff * weight);
+        }
+
+        updateCalibBadge();
+        updateHud();
+      }
+
+      function stopRelativeSensor() {
+        if (st.relSensor) {
+          try { st.relSensor.stop(); } catch (_) {}
+          st.relSensor = null;
+        }
+      }
+
+      /* 1순위: W3C RelativeOrientationSensor (GAME_ROTATION_VECTOR — 자이로+가속도 전용, 지자기 완전 배제) */
+      function tryStartRelativeSensor() {
+        stopRelativeSensor();
+        if (typeof window.RelativeOrientationSensor !== 'function') return false;
         let sensor = null;
         try {
-          sensor = new window.AbsoluteOrientationSensor({ frequency: 30, referenceFrame: 'device' });
+          sensor = new window.RelativeOrientationSensor({ frequency: 30, referenceFrame: 'device' });
         } catch (_) {
           try {
-            sensor = new window.AbsoluteOrientationSensor();
+            sensor = new window.RelativeOrientationSensor();
           } catch (e2) {
             st.sensorErr = (e2 && e2.name) ? e2.name : 'InitErr';
             return false;
@@ -2366,80 +2320,35 @@
           sensor.addEventListener('reading', () => {
             const h = headingFromQuaternion(sensor.quaternion);
             if (h === null) return;
-            window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
-            applyAbsoluteHeading(h, 'AbsoluteSensor');
+            window.removeEventListener('deviceorientation', onGyroDeviceOrientation, false);
+            applyGyroHeading(h, 'RelativeSensor');
           });
           sensor.addEventListener('error', (ev) => {
             st.sensorErr = (ev && ev.error && ev.error.name) ? ev.error.name : 'SensorError';
-            stopAbsoluteSensor();
+            stopRelativeSensor();
+            // RelativeOrientationSensor 실패 시 즉시 deviceorientation 자이로로 폴백
+            window.addEventListener('deviceorientation', onGyroDeviceOrientation, false);
             updateCalibBadge();
           });
           sensor.start();
-          st.absSensor = sensor;
+          st.relSensor = sensor;
           return true;
         } catch (err) {
           st.sensorErr = (err && err.name) ? err.name : 'StartErr';
-          stopAbsoluteSensor();
+          stopRelativeSensor();
           return false;
         }
       }
 
-      /* 2순위: deviceorientationabsolute / iOS webkitCompassHeading */
-      function onAbsoluteOrientation(ev) {
-        if (st.sensorSource === 'AbsoluteSensor' && st.hasAbsoluteFix) return;
-        if (ev.type === 'deviceorientationabsolute' && (ev.alpha === null || typeof ev.alpha !== 'number')) {
-          if (!st.sensorErr) st.sensorErr = 'AbsNull';
-          updateCalibBadge();
+      /* 2순위: 표준 deviceorientation 자이로 (iOS Safari 및 RelativeOrientationSensor 미지원 브라우저) */
+      function onGyroDeviceOrientation(ev) {
+        if (st.sensorSource === 'RelativeSensor' && st.hasSensorFix) {
+          window.removeEventListener('deviceorientation', onGyroDeviceOrientation, false);
           return;
         }
-        const parsed = extractCompassHeading(ev);
-        if (!parsed || !parsed.isAbsolute) return;
-        const srcName = typeof ev.webkitCompassHeading === 'number' ? 'iOS나침반' : '절대센서';
-        applyAbsoluteHeading(parsed.heading, srcName);
-      }
-
-      /* 3순위: 절대 나침반이 응답하지 않을 때만 동작하는 상대 자이로 폴백 */
-      function onFallbackOrientation(ev) {
-        if (st.hasAbsoluteFix) {
-          window.removeEventListener('deviceorientation', onFallbackOrientation, false);
-          return;
-        }
-        const parsed = extractCompassHeading(ev);
-        if (!parsed) return;
-
-        if (parsed.isAbsolute) {
-          onAbsoluteOrientation(ev);
-          return;
-        }
-
-        const curRel = parsed.heading;
-        if (st.lastRelGyroHeading === null) {
-          st.lastRelGyroHeading = curRel;
-          st.filteredHeading = curRel;
-          st.hasSensorFix = true;
-          st.sensorType = 'relative';
-          st.sensorSource = 'relative';
-
-          // 절대 나침반 미수신 브라우저(크롬 등): 출발 지점의 출입문 방향(북쪽방→남쪽 180°, 남쪽방→북쪽 0°)으로 시작 방위 자동 고정
-          const curNode = st.map.nodes[st.route[st.step] || st.startId];
-          const initHeading = typeof st.entryQrHeading === 'number'
-            ? st.entryQrHeading
-            : getNodeExitHeading(curNode);
-          st.manualOffset = normDeg(initHeading - curRel);
-          st.calibMode = typeof st.entryQrHeading === 'number' ? 'qr' : 'auto-exit';
-          st.simHeading = initHeading;
-        } else {
-          const delta = getRelAngle(curRel, st.lastRelGyroHeading);
-          st.lastRelGyroHeading = curRel;
-          if (Math.abs(delta) > 60 || Math.abs(delta) < 0.15) return;
-          st.filteredHeading = normDeg(st.filteredHeading + delta);
-          st.hasSensorFix = true;
-          st.sensorType = 'relative';
-          st.sensorSource = 'relative';
-        }
-
-        updateCalibBadge();
-        updateHud();
+        const h = extractGyroHeading(ev);
+        if (h === null) return;
+        applyGyroHeading(h, 'DeviceOrientation');
       }
 
       function requestOrientation() {
@@ -2447,45 +2356,37 @@
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           return DeviceOrientationEvent.requestPermission().then((res) => {
             if (res === 'granted') {
-              window.removeEventListener('deviceorientation', onFallbackOrientation, false);
-              window.removeEventListener('deviceorientation', onAbsoluteOrientation, false);
-              st.hasAbsoluteFix = false;
+              window.removeEventListener('deviceorientation', onGyroDeviceOrientation, false);
               st.hasSensorFix = false;
-              st.sensorType = 'none';
               st.sensorSource = 'none';
               st.sensorErr = '';
-              st.lastRelGyroHeading = null;
-              window.addEventListener('deviceorientation', onFallbackOrientation, false);
+              window.addEventListener('deviceorientation', onGyroDeviceOrientation, false);
               return true;
             }
             return false;
           }).catch(() => false);
         }
 
-        stopAbsoluteSensor();
-        window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
-        window.removeEventListener('deviceorientation', onAbsoluteOrientation, false);
-        window.removeEventListener('deviceorientation', onFallbackOrientation, false);
+        stopRelativeSensor();
+        window.removeEventListener('deviceorientation', onGyroDeviceOrientation, false);
         if (st.oriTimer1) clearTimeout(st.oriTimer1);
 
-        st.hasAbsoluteFix = false;
         st.hasSensorFix = false;
-        st.sensorType = 'none';
         st.sensorSource = 'none';
         st.sensorErr = '';
-        st.lastRelGyroHeading = null;
 
-        probeMagnetometerPermission();
-        // 1순위: Generic Sensor API (AbsoluteOrientationSensor) + 2순위: deviceorientationabsolute 동시 대기
-        tryStartAbsoluteSensor();
-        window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
-
-        // 1초 안에 절대 나침반이 응답하지 않는 환경(크롬 등)에서만 상대 자이로 폴백 활성화 (절대 리스너는 계속 유지)
-        st.oriTimer1 = setTimeout(() => {
-          st.oriTimer1 = null;
-          if (st.hasAbsoluteFix) return;
-          window.addEventListener('deviceorientation', onFallbackOrientation, false);
-        }, 1000);
+        // 1순위: RelativeOrientationSensor (지자기 완전 배제)
+        const startedRel = tryStartRelativeSensor();
+        if (!startedRel) {
+          window.addEventListener('deviceorientation', onGyroDeviceOrientation, false);
+        } else {
+          // 600ms 안에 RelativeOrientationSensor가 응답하지 않으면 표준 deviceorientation 폴백 활성화
+          st.oriTimer1 = setTimeout(() => {
+            st.oriTimer1 = null;
+            if (st.hasSensorFix) return;
+            window.addEventListener('deviceorientation', onGyroDeviceOrientation, false);
+          }, 600);
+        }
         return Promise.resolve(true);
       }
 
@@ -3294,9 +3195,19 @@
       function updateOverlayPreview() {
         const sN = st.map.nodes[dom.overlayStartSel.value];
         const dN = st.map.nodes[dom.overlayDestSel.value];
+        if (sN && dom.startDoorTip) {
+          dom.startDoorTip.textContent = getDoorTipText(sN);
+        }
         if (sN && dN) {
           dom.overlayRouteText.textContent = `${sN.floor}층 ${sN.name} → ${dN.floor}층 ${dN.name}`;
           dom.btnLaunchAR.textContent = `📷 ${dN.floor}F ${josa(dN.name, '으로', '로')} AR 길안내 시작`;
+        }
+      }
+
+      function updateRouteDoorTip() {
+        const sN = st.map.nodes[dom.startSel.value];
+        if (dom.routeDoorTip) {
+          dom.routeDoorTip.textContent = getDoorTipText(sN);
         }
       }
 
@@ -3325,6 +3236,7 @@
         fillNodeSelect(dom.startSel, startVal, '');
         fillNodeSelect(dom.destSel, destVal, kw);
         syncPrefButtons();
+        updateRouteDoorTip();
       }
 
       function openRouteSheet() {
@@ -3385,7 +3297,7 @@
           requestAnimationFrame(syncHudBounds);
         } else {
           if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch (_) {} }
-          if (!st.hasAbsoluteFix) requestOrientation();
+          if (!st.hasSensorFix) requestOrientation();
           setMinimapExpanded(false);
           updateCalibBadge();
           drawEditorSvg();
@@ -3534,7 +3446,7 @@
           }
         };
         dom.btnBackToAR.onclick = () => setMode('nav');
-        dom.btnRetryPerm.onclick = () => { toast('카메라·나침반 센서를 다시 확인합니다...'); launchAR(); };
+        dom.btnRetryPerm.onclick = () => { toast('카메라·자이로 센서를 다시 확인합니다...'); launchAR(); };
         dom.btnCloseDiag.onclick = () => showDiag(null);
 
         // 하단 컨트롤
@@ -3543,7 +3455,7 @@
           const prevNode = st.map.nodes[st.route[st.step]];
           st.step--;
           const cur = st.map.nodes[st.route[st.step]];
-          if (cur && prevNode && cur.floor !== prevNode.floor && !st.hasAbsoluteFix) {
+          if (cur && prevNode && cur.floor !== prevNode.floor) {
             alignHeadingToNodeExit(cur);
           }
           if (cur && !st.miniExpanded) st.miniPreviewFloor = cur.floor;
@@ -3554,8 +3466,8 @@
           const prevNode = st.map.nodes[st.route[st.step]];
           st.step++;
           const cur = st.map.nodes[st.route[st.step]];
-          // 계단·엘리베이터로 층 이동 후 새 층에 내리면 상대 자이로 기기는 출입구 기준 방위(북/남)로 자동 재정렬
-          if (cur && prevNode && cur.floor !== prevNode.floor && !st.hasAbsoluteFix) {
+          // 계단·엘리베이터로 층 이동 후 새 층에 내리면 출입구 기준 방위(북/남)로 자이로 영점 자동 재정렬
+          if (cur && prevNode && cur.floor !== prevNode.floor) {
             alignHeadingToNodeExit(cur);
           }
           if (cur && !st.miniExpanded) st.miniPreviewFloor = cur.floor;
@@ -3607,6 +3519,7 @@
         // 경로 선택 바텀시트
         dom.btnCloseRoute.onclick = () => dom.routeSheetBg.classList.remove('open');
         dom.routeSheetBg.onclick = (e) => { if (e.target === dom.routeSheetBg) dom.routeSheetBg.classList.remove('open'); };
+        dom.startSel.onchange = updateRouteDoorTip;
         dom.destSearch.oninput = (e) => populateRouteSelectors(e.target.value, dom.startSel.value, dom.destSel.value);
         dom.prefBtns.forEach((b) => {
           b.onclick = () => {
@@ -3616,6 +3529,7 @@
         });
         dom.btnSwapRoute.onclick = () => {
           const t = dom.startSel.value; dom.startSel.value = dom.destSel.value; dom.destSel.value = t;
+          updateRouteDoorTip();
         };
         dom.btnApplyRoute.onclick = () => {
           if (!dom.startSel.value || !dom.destSel.value) return;
@@ -3633,58 +3547,10 @@
           toast('새 경로로 안내를 시작합니다.', 'ok');
         };
 
-        // 건물 북쪽 오프셋 보정 (절대 나침반 자동 저장 + 나침반 앱 각도 직접 입력 지원)
-        dom.btnSaveBuildingNorth.onclick = () => {
-          if (!st.hasAbsoluteFix || st.sensorType !== 'absolute') {
-            if (st.sensorType === 'none') requestOrientation();
-            toast('이 브라우저에서 절대 나침반이 차단되어 있습니다. 크롬 동작센서 권한을 허용하거나 아래 칸에 나침반 앱 각도를 직접 입력하세요.', 'warn');
-            return;
-          }
-          const offset = Math.round(st.filteredHeading);
-          st.map.buildingNorthOffset = offset;
-          st.map.presetNorthVersion = offset;
-          st.manualOffset = 0;
-          st.usingSimSlider = false;
-          st.calibMode = 'auto';
-          saveMap();
-          updateCalibBadge();
-          toast(`절대 나침반 북쪽 기준(${offset}°) 저장 완료! 아래 프리셋 코드를 복사해 배포하세요.`, 'ok');
-        };
-        dom.btnApplyManualNorth.onclick = () => {
-          const rawVal = Number(dom.manualNorthIn.value);
-          if (dom.manualNorthIn.value === '' || Number.isNaN(rawVal)) {
-            toast('0~359 사이의 각도 숫자를 입력하세요.', 'warn');
-            dom.manualNorthIn.focus();
-            return;
-          }
-          const offset = Math.round(normDeg(rawVal));
-          st.map.buildingNorthOffset = offset;
-          st.map.presetNorthVersion = offset;
-          st.manualOffset = 0;
-          st.usingSimSlider = false;
-          st.calibMode = 'auto';
-          saveMap();
-          updateCalibBadge();
-          toast(`도면 북쪽 기준(${offset}°) 적용 완료! 아래 프리셋 코드를 복사해 배포하세요.`, 'ok');
-        };
-        dom.btnResetNorthOffset.onclick = () => {
-          st.map.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
-          st.map.presetNorthVersion = DEFAULT_BUILDING_NORTH_OFFSET;
-          saveMap();
-          updateCalibBadge();
-          toast(`도면 북쪽 오프셋을 기본 프리셋(${DEFAULT_BUILDING_NORTH_OFFSET}°)으로 되돌렸습니다.`);
-        };
-        dom.btnCopyNorthPreset.onclick = () => {
-          dom.northPresetCodeIn.select();
-          dom.northPresetCodeIn.setSelectionRange(0, 99999);
-          try { if (document.execCommand('copy')) { toast('프리셋 코드 복사 완료! HTML 상단에 붙여넣고 배포하세요.', 'ok'); return; } } catch (_) {}
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(dom.northPresetCodeIn.value)
-              .then(() => toast('프리셋 코드 복사 완료! HTML 상단에 붙여넣고 배포하세요.', 'ok'))
-              .catch(() => toast('코드를 직접 선택해 복사하세요.', 'warn'));
-          } else {
-            toast('코드를 직접 선택해 복사하세요.', 'warn');
-          }
+        // 자이로 센서 재연결 버튼
+        dom.btnRestartGyro.onclick = () => {
+          requestOrientation();
+          toast('자이로 센서를 다시 연결합니다.', 'ok');
         };
 
         // 편집기 이벤트
