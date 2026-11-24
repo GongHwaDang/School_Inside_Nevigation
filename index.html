@@ -1962,13 +1962,24 @@
       dom.btnModalNo.onclick = () => { dom.modalBg.classList.remove('open'); modalCb = null; };
       dom.btnModalYes.onclick = () => { const fn = modalCb; dom.modalBg.classList.remove('open'); modalCb = null; if (fn) fn(); };
 
+      function toSinoKorean(numInput) {
+        const n = parseInt(numInput, 10);
+        if (Number.isNaN(n) || n <= 0 || n >= 100) return String(numInput);
+        const d = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+        const tens = Math.floor(n / 10);
+        const ones = n % 10;
+        return (tens > 0 ? (tens === 1 ? '십' : d[tens] + '십') : '') + d[ones];
+      }
+
       function formatForTTS(text) {
         if (!text) return '';
         return String(text)
           .replace(/화장실\s*\(\s*여\s*\)/g, '여자 화장실')
           .replace(/화장실\s*\(\s*남\s*\)/g, '남자 화장실')
           .replace(/E\s*\/\s*V/gi, '엘리베이터')
-          .replace(/(\d+)\s*-\s*(\d+)/g, '$1학년 $2반 교실');
+          .replace(/(\d+)\s*-\s*(\d+)/g, (_, g, c) => `${toSinoKorean(g)}학년 ${toSinoKorean(c)}반 교실`)
+          .replace(/(\d+)\s*학년\s*(\d+)\s*반/g, (_, g, c) => `${toSinoKorean(g)}학년 ${toSinoKorean(c)}반`)
+          .replace(/(\d+)\s*층/g, (_, fl) => `${toSinoKorean(fl)}층`);
       }
 
       function getBatchimInfo(word) {
@@ -2010,13 +2021,16 @@
           ko[0];
       }
 
+      let ttsUnlocked = false;
       function unlockTts() {
         if (!('speechSynthesis' in window)) return;
         try {
           pickKoreanVoice();
+          if (ttsUnlocked) return;
           const u = new SpeechSynthesisUtterance('');
           u.lang = 'ko-KR'; u.volume = 0;
           window.speechSynthesis.speak(u);
+          ttsUnlocked = true;
         } catch (_) {}
       }
 
@@ -2196,6 +2210,26 @@
           return `🚪 ${node.name} 출구(복도 방향)를 바라본 상태에서 시작하세요.`;
         }
         return `🚪 ${node.name} 출입문(복도) 쪽을 바라본 상태에서 시작하세요.`;
+      }
+
+      /* 목적지 선택 시 출력할 방식 1(출입문·복도 방향) 음성 안내 문구 */
+      function getDoorTipTTS(node) {
+        if (!node) return '출발 위치의 출입문, 복도 쪽을 바라보고 안내 시작 버튼을 눌러주세요.';
+        const spoken = formatForTTS(node.name);
+        if (node.type === 'entrance') {
+          return `${spoken} 안쪽, 복도 방향을 바라보고 안내 시작 버튼을 눌러주세요.`;
+        }
+        if (node.type === 'stairs' || node.type === 'elevator') {
+          return `${spoken} 출구, 복도 방향을 바라보고 안내 시작 버튼을 눌러주세요.`;
+        }
+        return `${spoken} 출입문, 복도 쪽을 바라보고 안내 시작 버튼을 눌러주세요.`;
+      }
+
+      function speakDoorTipForStart(startId, destId) {
+        if (!startId || !destId || startId === destId) return;
+        const sn = st.map.nodes[startId];
+        if (!sn) return;
+        speak(getDoorTipTTS(sn));
       }
 
       /* W3C RelativeOrientationSensor 쿼터니언 [x, y, z, w] -> 후면 카메라 기준 연속 회전각(지자기 미사용) */
@@ -3171,7 +3205,12 @@
         sel.innerHTML = '';
         [1, 2, 3].forEach((fl) => {
           const list = visible
-            .filter((n) => n.floor === fl && (!kw || n.name.toLowerCase().includes(kw) || formatForTTS(n.name).includes(kw) || `${fl}층`.includes(kw)))
+            .filter((n) => {
+              if (n.floor !== fl) return false;
+              if (!kw) return true;
+              const numClass = n.name.replace(/(\d+)\s*-\s*(\d+)/g, '$1학년 $2반 교실');
+              return n.name.toLowerCase().includes(kw) || numClass.includes(kw) || formatForTTS(n.name).includes(kw) || `${fl}층`.includes(kw);
+            })
             .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
           if (!list.length) return;
           const og = document.createElement('optgroup');
@@ -3385,7 +3424,12 @@
          ===================================================================== */
       function bindEvents() {
         dom.overlayStartSel.onchange = updateOverlayPreview;
-        dom.overlayDestSel.onchange = updateOverlayPreview;
+        dom.overlayDestSel.addEventListener('touchstart', unlockTts, { passive: true });
+        dom.overlayDestSel.addEventListener('mousedown', unlockTts);
+        dom.overlayDestSel.onchange = () => {
+          updateOverlayPreview();
+          speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
+        };
         dom.btnOverlaySwap.onclick = () => {
           const t = dom.overlayStartSel.value;
           dom.overlayStartSel.value = dom.overlayDestSel.value;
@@ -3520,6 +3564,11 @@
         dom.btnCloseRoute.onclick = () => dom.routeSheetBg.classList.remove('open');
         dom.routeSheetBg.onclick = (e) => { if (e.target === dom.routeSheetBg) dom.routeSheetBg.classList.remove('open'); };
         dom.startSel.onchange = updateRouteDoorTip;
+        dom.destSel.addEventListener('touchstart', unlockTts, { passive: true });
+        dom.destSel.addEventListener('mousedown', unlockTts);
+        dom.destSel.onchange = () => {
+          speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
+        };
         dom.destSearch.oninput = (e) => populateRouteSelectors(e.target.value, dom.startSel.value, dom.destSel.value);
         dom.prefBtns.forEach((b) => {
           b.onclick = () => {
