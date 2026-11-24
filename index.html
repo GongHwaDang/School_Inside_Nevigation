@@ -1449,7 +1449,7 @@
         <div class="preset-copy-box">
           <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
           <div class="row">
-            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 256;" />
+            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 0;" />
             <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
           </div>
         </div>
@@ -1824,9 +1824,9 @@
         rearDevices: [],
         lensIdx: 0,
         compassRaw: null,
-        lastCompassRaw: null,
-        lastRelGyroAlpha: null,
-        hasRelGyro: false,
+        lastRelGyroHeading: null,
+        sensorType: 'none',      // 'none' | 'absolute' | 'relative'
+        hasAbsoluteFix: false,
         filteredHeading: 180,
         hasSensorFix: false,
         calibMode: 'idle',
@@ -2144,8 +2144,58 @@
       }
 
       /* =====================================================================
-         7. 절대 나침반 자동 영점 보정 + QR 자동 보정 + 원탭 정면 맞춤
+         7. 절대 나침반(기울기 보정 3D 후면 카메라 기준) + QR 자동 보정 + 정면 맞춤
          ===================================================================== */
+      function getScreenAngle() {
+        if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+          return window.screen.orientation.angle;
+        }
+        return typeof window.orientation === 'number' ? window.orientation : 0;
+      }
+
+      function getCardinalKo(deg) {
+        const dirs = ['도면 북쪽 ▲', '도면 북동', '도면 동쪽 ▶', '도면 남동', '도면 남쪽 ▼', '도면 남서', '도면 서쪽 ◀', '도면 북서'];
+        return dirs[Math.round(normDeg(deg) / 45) % 8];
+      }
+
+      /* W3C 3D 회전행렬 기반 기울기 보정 나침반 헤딩 추출
+         - AR처럼 폰을 세워 들었을 때(beta≈70~110°) 후면 카메라(-Z축) 방향을 사용해 짐벌락·180° 튐 차단
+         - 폰을 바닥과 평행하게 눕혔을 때(|beta|<17°)는 화면 상단(+Y축) 방향 사용 */
+      function extractCompassHeading(ev) {
+        if (typeof ev.webkitCompassHeading === 'number' && !Number.isNaN(ev.webkitCompassHeading)) {
+          return { heading: normDeg(ev.webkitCompassHeading + getScreenAngle()), isAbsolute: true };
+        }
+        if (typeof ev.alpha !== 'number' || Number.isNaN(ev.alpha)) return null;
+
+        const isAbs = ev.type === 'deviceorientationabsolute' || ev.absolute === true;
+        const hasTilt =
+          typeof ev.beta === 'number' && !Number.isNaN(ev.beta) &&
+          typeof ev.gamma === 'number' && !Number.isNaN(ev.gamma);
+
+        let heading;
+        if (hasTilt) {
+          const degToRad = Math.PI / 180;
+          const a = ev.alpha * degToRad;
+          const b = ev.beta * degToRad;
+          const g = ev.gamma * degToRad;
+          const ca = Math.cos(a), sa = Math.sin(a);
+          const sb = Math.sin(b);
+          const cg = Math.cos(g), sg = Math.sin(g);
+
+          // 후면 카메라(-Z)의 세계 좌표계(East, North) 수평 투영 벡터
+          const camEast  = -(ca * sg + sa * sb * cg);
+          const camNorth =  (ca * sb * cg - sa * sg);
+          if (Math.hypot(camEast, camNorth) >= 0.3) {
+            heading = normDeg((Math.atan2(camEast, camNorth) * 180) / Math.PI);
+          } else {
+            heading = normDeg(360 - ev.alpha + getScreenAngle());
+          }
+        } else {
+          heading = normDeg(360 - ev.alpha + getScreenAngle());
+        }
+        return { heading, isAbsolute: isAbs };
+      }
+
       function getEffectiveHeading() {
         if (st.usingSimSlider || !st.hasSensorFix) return normDeg(st.simHeading);
         if (st.calibMode === 'qr' || st.calibMode === 'manual') {
@@ -2160,40 +2210,45 @@
         if (dom.northPresetCodeIn) {
           dom.northPresetCodeIn.value = `const DEFAULT_BUILDING_NORTH_OFFSET = ${deg};`;
         }
-        dom.liveCompassText.textContent = st.hasSensorFix
-          ? `실시간 나침반: ${Math.round(st.filteredHeading)}° (적용 시선 ${Math.round(getEffectiveHeading())}°)`
-          : '실시간 나침반: 센서 대기 중';
+        if (!st.hasSensorFix) {
+          dom.liveCompassText.textContent = '실시간 나침반: 센서 대기 중';
+          return;
+        }
+        const eff = Math.round(getEffectiveHeading());
+        const raw = Math.round(st.filteredHeading);
+        if (st.sensorType === 'absolute') {
+          dom.liveCompassText.textContent = `절대 나침반(진북): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
+        } else {
+          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미지원): ${raw}° → 시선 ${eff}°`;
+        }
       }
 
-      function onOrientation(ev) {
-        let heading = null;
-        if (typeof ev.webkitCompassHeading === 'number' && !Number.isNaN(ev.webkitCompassHeading)) {
-          heading = normDeg(ev.webkitCompassHeading);
-        } else if (typeof ev.alpha === 'number' && !Number.isNaN(ev.alpha)) {
-          heading = normDeg(360 - ev.alpha);
-        }
-        if (heading === null) return;
+      /* 절대 나침반 핸들러: 들어오는 즉시 최우선 적용 (상대 자이로에 절대 밀리지 않음) */
+      function onAbsoluteOrientation(ev) {
+        const parsed = extractCompassHeading(ev);
+        if (!parsed) return;
+        if (!parsed.isAbsolute) return;
 
         if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
+        // 혹시 켜져 있던 상대 자이로 폴백 리스너 즉시 해제
+        window.removeEventListener('deviceorientation', onFallbackOrientation, true);
+
+        const heading = parsed.heading;
         st.compassRaw = heading;
 
-        if (!st.hasSensorFix) {
+        if (!st.hasAbsoluteFix) {
+          // 첫 절대 나침반 수신 시 기존 임시값/상대값을 즉시 진북 각도로 교체
           st.filteredHeading = heading;
-          st.lastCompassRaw = heading;
+          st.hasAbsoluteFix = true;
           st.hasSensorFix = true;
+          st.sensorType = 'absolute';
           if (st.calibMode === 'idle') st.calibMode = 'auto';
         } else {
-          const stepJump = st.lastCompassRaw !== null ? Math.abs(getRelAngle(heading, st.lastCompassRaw)) : 0;
-          st.lastCompassRaw = heading;
           const diff = getRelAngle(heading, st.filteredHeading);
-
-          if (st.hasRelGyro) {
-            if (st.calibMode === 'auto' && stepJump < 20 && Math.abs(diff) < 35) {
-              st.filteredHeading = normDeg(st.filteredHeading + diff * 0.03);
-            }
-          } else {
-            const alphaWeight = stepJump > 35 ? 0.04 : 0.18;
-            st.filteredHeading = normDeg(st.filteredHeading + diff * alphaWeight);
+          if (Math.abs(diff) >= 0.35) {
+            // 실내 미세 떨림은 부드럽게 억제하되, 큰 방향 전환은 차단 없이 빠르게 추종
+            const weight = Math.abs(diff) > 25 ? 0.3 : 0.2;
+            st.filteredHeading = normDeg(st.filteredHeading + diff * weight);
           }
         }
 
@@ -2201,25 +2256,36 @@
         updateHud();
       }
 
-      function onRelativeGyroOrientation(ev) {
-        if (ev.absolute === true || typeof ev.alpha !== 'number' || Number.isNaN(ev.alpha)) return;
-        const curRel = normDeg(360 - ev.alpha);
-        if (st.lastRelGyroAlpha === null) {
-          st.lastRelGyroAlpha = curRel;
-          st.hasRelGyro = true;
+      /* 절대 나침반 이벤트가 없는 구형 기기 전용 폴백 (절대 나침반 수신 시 자동 중단) */
+      function onFallbackOrientation(ev) {
+        if (st.hasAbsoluteFix) {
+          window.removeEventListener('deviceorientation', onFallbackOrientation, true);
           return;
         }
-        const delta = getRelAngle(curRel, st.lastRelGyroAlpha);
-        st.lastRelGyroAlpha = curRel;
-        if (Math.abs(delta) > 45 || Math.abs(delta) < 0.15) return;
+        const parsed = extractCompassHeading(ev);
+        if (!parsed) return;
 
-        st.hasRelGyro = true;
-        if (!st.hasSensorFix) {
+        // 일반 deviceorientation 이벤트에 절대 나침반이 실려 온 경우(iOS 등) 즉시 절대 모드로 승격
+        if (parsed.isAbsolute) {
+          onAbsoluteOrientation(ev);
+          return;
+        }
+
+        const curRel = parsed.heading;
+        if (st.lastRelGyroHeading === null) {
+          st.lastRelGyroHeading = curRel;
           st.filteredHeading = curRel;
           st.hasSensorFix = true;
+          st.sensorType = 'relative';
           if (st.calibMode === 'idle') st.calibMode = 'auto';
         } else {
-          st.filteredHeading = normDeg(st.filteredHeading + delta * 0.85);
+          const delta = getRelAngle(curRel, st.lastRelGyroHeading);
+          st.lastRelGyroHeading = curRel;
+          if (Math.abs(delta) > 60 || Math.abs(delta) < 0.15) return;
+          // 회전량 100% 그대로 반영 (기존 0.85 감쇠 누락 제거)
+          st.filteredHeading = normDeg(st.filteredHeading + delta);
+          st.hasSensorFix = true;
+          st.sensorType = 'relative';
         }
 
         updateCalibBadge();
@@ -2231,29 +2297,37 @@
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           return DeviceOrientationEvent.requestPermission().then((res) => {
             if (res === 'granted') {
-              window.removeEventListener('deviceorientation', onOrientation, true);
-              window.addEventListener('deviceorientation', onOrientation, true);
+              window.removeEventListener('deviceorientation', onFallbackOrientation, true);
+              window.removeEventListener('deviceorientation', onAbsoluteOrientation, true);
+              st.hasAbsoluteFix = false;
+              st.hasSensorFix = false;
+              st.sensorType = 'none';
+              st.lastRelGyroHeading = null;
+              window.addEventListener('deviceorientation', onFallbackOrientation, true);
               return true;
             }
             return false;
           }).catch(() => false);
         }
-        window.removeEventListener('deviceorientationabsolute', onOrientation, true);
-        window.removeEventListener('deviceorientation', onOrientation, true);
-        window.removeEventListener('deviceorientation', onRelativeGyroOrientation, true);
+
+        window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+        window.removeEventListener('deviceorientation', onAbsoluteOrientation, true);
+        window.removeEventListener('deviceorientation', onFallbackOrientation, true);
         if (st.oriTimer1) clearTimeout(st.oriTimer1);
+
+        st.hasAbsoluteFix = false;
         st.hasSensorFix = false;
-        st.hasRelGyro = false;
-        st.lastCompassRaw = null;
-        st.lastRelGyroAlpha = null;
-        window.addEventListener('deviceorientationabsolute', onOrientation, true);
-        window.addEventListener('deviceorientation', onRelativeGyroOrientation, true);
+        st.sensorType = 'none';
+        st.lastRelGyroHeading = null;
+
+        // 안드로이드: 절대 나침반만 먼저 단독 등록 (상대 자이로 선점 차단)
+        window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+        // 1.5초 안에 절대 나침반이 응답하지 않는 기기에서만 폴백 활성화 (절대 리스너는 계속 유지)
         st.oriTimer1 = setTimeout(() => {
-          if (st.hasSensorFix) return;
-          window.removeEventListener('deviceorientationabsolute', onOrientation, true);
-          window.removeEventListener('deviceorientation', onRelativeGyroOrientation, true);
-          window.addEventListener('deviceorientation', onOrientation, true);
-        }, 1000);
+          st.oriTimer1 = null;
+          if (st.hasAbsoluteFix) return;
+          window.addEventListener('deviceorientation', onFallbackOrientation, true);
+        }, 1500);
         return Promise.resolve(true);
       }
 
@@ -3149,6 +3223,7 @@
           requestAnimationFrame(syncHudBounds);
         } else {
           if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+          if (!st.hasAbsoluteFix) requestOrientation();
           setMinimapExpanded(false);
           updateCalibBadge();
           drawEditorSvg();
@@ -3384,19 +3459,22 @@
           toast('새 경로로 안내를 시작합니다.', 'ok');
         };
 
-        // 건물 북쪽 오프셋 보정
+        // 건물 북쪽 오프셋 보정 (절대 나침반 기준만 프리셋 저장 허용)
         dom.btnSaveBuildingNorth.onclick = () => {
-          if (!st.hasSensorFix) {
+          if (!st.hasAbsoluteFix || st.sensorType !== 'absolute') {
             requestOrientation();
-            toast('스마트폰 나침반이 활성화된 상태에서 AR 시작 후 눌러주세요.', 'warn');
+            toast('절대 나침반(진북) 신호를 잡는 중입니다. 폰을 8자로 2~3번 흔든 뒤 다시 눌러주세요.', 'warn');
             return;
           }
-          st.map.buildingNorthOffset = Math.round(st.filteredHeading);
+          const offset = Math.round(st.filteredHeading);
+          st.map.buildingNorthOffset = offset;
+          st.map.presetNorthVersion = offset;
+          st.manualOffset = 0;
           st.usingSimSlider = false;
           st.calibMode = 'auto';
           saveMap();
           updateCalibBadge();
-          toast(`도면 북쪽 기준(${st.map.buildingNorthOffset}°)이 저장되었습니다. 아래 프리셋 코드를 복사해 배포하세요!`, 'ok');
+          toast(`절대 나침반 북쪽 기준(${offset}°) 저장 완료! 아래 프리셋 코드를 복사해 배포하세요.`, 'ok');
         };
         dom.btnResetNorthOffset.onclick = () => {
           st.map.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
