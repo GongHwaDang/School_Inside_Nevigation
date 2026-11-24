@@ -1169,6 +1169,16 @@
 
 
     /* 미니맵 바로 아래 슬림 고정 [🎯 정면 맞춤] 보조 버튼 (AR 시야 최소화) */
+    @keyframes pulse-amber-calib {
+      0%, 100% { box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25), 0 0 0 0 rgba(245, 158, 11, 0.58); }
+      55% { box-shadow: 0 6px 16px rgba(217, 119, 6, 0.36), 0 0 0 9px rgba(245, 158, 11, 0); }
+    }
+    .mini-calib-btn.needs-calib {
+      background: #fef3c7;
+      border-color: #d97706;
+      color: #78350f;
+      animation: pulse-amber-calib 1.9s ease-in-out infinite;
+    }
     .mini-calib-btn {
       position: fixed;
       top: calc(var(--hud-bottom) + 146px);
@@ -1439,7 +1449,7 @@
               복도에서 도면 위쪽(1층 행정실·교무실 방향)을 정면으로 바라보고 버튼을 누르면 실제 진북과의 각도 차이를 저장합니다.
             </div>
           </div>
-          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 19°</span>
+          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 49°</span>
         </div>
         <div class="row">
           <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
@@ -1454,7 +1464,7 @@
         <div class="preset-copy-box">
           <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
           <div class="row">
-            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 19;" />
+            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 49;" />
             <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
           </div>
         </div>
@@ -1617,7 +1627,7 @@
       const TTS_RATE = 0.96;
       // 모든 방문객 기기에 기본 적용되는 건물 도면 북쪽 기준 프리셋 각도 (0~359)
       // 학교 현장에서 편집기로 측정한 숫자를 여기에 넣고 배포하면 전 기기에 동일 적용됩니다.
-      const DEFAULT_BUILDING_NORTH_OFFSET = 19;
+      const DEFAULT_BUILDING_NORTH_OFFSET = 49;
 
       /* =====================================================================
          1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
@@ -1834,6 +1844,9 @@
         sensorSource: 'none',    // 'none' | 'AbsoluteOrientationSensor' | 'deviceorientationabsolute' | 'webkitCompass' | 'relative'
         sensorType: 'none',      // 'none' | 'absolute' | 'relative'
         sensorErr: '',
+        magPermState: '',
+        relNoticeShown: false,
+        entryQrHeading: null,
         hasAbsoluteFix: false,
         filteredHeading: 180,
         hasSensorFix: false,
@@ -2231,7 +2244,10 @@
         if (st.sensorType === 'absolute') {
           dom.liveCompassText.textContent = `절대 나침반(${st.sensorSource}): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
         } else {
-          const errTag = st.sensorErr ? ` [${st.sensorErr}]` : '';
+          const diagParts = [];
+          if (st.sensorErr) diagParts.push(st.sensorErr);
+          if (st.magPermState) diagParts.push(`mag:${st.magPermState}`);
+          const errTag = diagParts.length ? ` [${diagParts.join(', ')}]` : '';
           dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미수신${errTag}): ${raw}° → 시선 ${eff}°`;
         }
       }
@@ -2242,7 +2258,7 @@
         const h = normDeg(heading);
 
         if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
-        window.removeEventListener('deviceorientation', onFallbackOrientation, true);
+        window.removeEventListener('deviceorientation', onFallbackOrientation, false);
 
         st.compassRaw = h;
         if (!st.hasAbsoluteFix) {
@@ -2285,17 +2301,44 @@
         }
       }
 
+      /* 브라우저 지자기(magnetometer) 권한 상태 비동기 확인 (진단용) */
+      function probeMagnetometerPermission() {
+        if (!navigator.permissions || typeof navigator.permissions.query !== 'function') return;
+        try {
+          navigator.permissions.query({ name: 'magnetometer' })
+            .then((res) => {
+              if (res && res.state) {
+                st.magPermState = res.state;
+                updateCalibBadge();
+              }
+            })
+            .catch(() => {});
+        } catch (_) {}
+      }
+
       /* 1순위: Chrome Generic Sensor API (AbsoluteOrientationSensor) */
       function tryStartAbsoluteSensor() {
         stopAbsoluteSensor();
-        if (typeof window.AbsoluteOrientationSensor !== 'function') return false;
+        if (typeof window.AbsoluteOrientationSensor !== 'function') {
+          st.sensorErr = 'NoAbsAPI';
+          return false;
+        }
+        let sensor = null;
         try {
-          const sensor = new window.AbsoluteOrientationSensor({ frequency: 25, referenceFrame: 'device' });
+          sensor = new window.AbsoluteOrientationSensor({ frequency: 30, referenceFrame: 'device' });
+        } catch (_) {
+          try {
+            sensor = new window.AbsoluteOrientationSensor();
+          } catch (e2) {
+            st.sensorErr = (e2 && e2.name) ? e2.name : 'InitErr';
+            return false;
+          }
+        }
+        try {
           sensor.addEventListener('reading', () => {
             const h = headingFromQuaternion(sensor.quaternion);
             if (h === null) return;
-            // AbsoluteOrientationSensor가 정상 동작하면 중복 이벤트 방지를 위해 레거시 리스너 제거
-            window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+            window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
             applyAbsoluteHeading(h, 'AbsoluteSensor');
           });
           sensor.addEventListener('error', (ev) => {
@@ -2306,7 +2349,8 @@
           sensor.start();
           st.absSensor = sensor;
           return true;
-        } catch (_) {
+        } catch (err) {
+          st.sensorErr = (err && err.name) ? err.name : 'StartErr';
           stopAbsoluteSensor();
           return false;
         }
@@ -2315,6 +2359,11 @@
       /* 2순위: deviceorientationabsolute / iOS webkitCompassHeading */
       function onAbsoluteOrientation(ev) {
         if (st.sensorSource === 'AbsoluteSensor' && st.hasAbsoluteFix) return;
+        if (ev.type === 'deviceorientationabsolute' && (ev.alpha === null || typeof ev.alpha !== 'number')) {
+          if (!st.sensorErr) st.sensorErr = 'AbsNull';
+          updateCalibBadge();
+          return;
+        }
         const parsed = extractCompassHeading(ev);
         if (!parsed || !parsed.isAbsolute) return;
         const srcName = typeof ev.webkitCompassHeading === 'number' ? 'iOS나침반' : '절대센서';
@@ -2324,7 +2373,7 @@
       /* 3순위: 절대 나침반이 응답하지 않을 때만 동작하는 상대 자이로 폴백 */
       function onFallbackOrientation(ev) {
         if (st.hasAbsoluteFix) {
-          window.removeEventListener('deviceorientation', onFallbackOrientation, true);
+          window.removeEventListener('deviceorientation', onFallbackOrientation, false);
           return;
         }
         const parsed = extractCompassHeading(ev);
@@ -2342,7 +2391,18 @@
           st.hasSensorFix = true;
           st.sensorType = 'relative';
           st.sensorSource = 'relative';
-          if (st.calibMode === 'idle') st.calibMode = 'auto';
+
+          // 벽면 QR(?start=...)로 진입한 경우 상대 자이로만으로도 QR 방향에 자동 정렬
+          if (typeof st.entryQrHeading === 'number') {
+            st.manualOffset = normDeg(st.entryQrHeading - curRel);
+            st.calibMode = 'qr';
+          } else {
+            if (st.calibMode === 'idle') st.calibMode = 'auto';
+            if (!st.relNoticeShown && st.mode === 'nav' && dom.startOverlay.classList.contains('hidden')) {
+              st.relNoticeShown = true;
+              toast('진행 방향을 바라보고 우측 [🎯 정면 맞춤]을 한 번 눌러주세요.', 'warn');
+            }
+          }
         } else {
           const delta = getRelAngle(curRel, st.lastRelGyroHeading);
           st.lastRelGyroHeading = curRel;
@@ -2362,14 +2422,15 @@
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           return DeviceOrientationEvent.requestPermission().then((res) => {
             if (res === 'granted') {
-              window.removeEventListener('deviceorientation', onFallbackOrientation, true);
-              window.removeEventListener('deviceorientation', onAbsoluteOrientation, true);
+              window.removeEventListener('deviceorientation', onFallbackOrientation, false);
+              window.removeEventListener('deviceorientation', onAbsoluteOrientation, false);
               st.hasAbsoluteFix = false;
               st.hasSensorFix = false;
               st.sensorType = 'none';
               st.sensorSource = 'none';
+              st.sensorErr = '';
               st.lastRelGyroHeading = null;
-              window.addEventListener('deviceorientation', onFallbackOrientation, true);
+              window.addEventListener('deviceorientation', onFallbackOrientation, false);
               return true;
             }
             return false;
@@ -2377,26 +2438,28 @@
         }
 
         stopAbsoluteSensor();
-        window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
-        window.removeEventListener('deviceorientation', onAbsoluteOrientation, true);
-        window.removeEventListener('deviceorientation', onFallbackOrientation, true);
+        window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
+        window.removeEventListener('deviceorientation', onAbsoluteOrientation, false);
+        window.removeEventListener('deviceorientation', onFallbackOrientation, false);
         if (st.oriTimer1) clearTimeout(st.oriTimer1);
 
         st.hasAbsoluteFix = false;
         st.hasSensorFix = false;
         st.sensorType = 'none';
         st.sensorSource = 'none';
+        st.sensorErr = '';
         st.lastRelGyroHeading = null;
 
+        probeMagnetometerPermission();
         // 1순위: Generic Sensor API (AbsoluteOrientationSensor) + 2순위: deviceorientationabsolute 동시 대기
         tryStartAbsoluteSensor();
-        window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+        window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
 
         // 1.5초 안에 절대 나침반이 응답하지 않는 환경에서만 상대 자이로 폴백 활성화 (절대 리스너는 계속 유지)
         st.oriTimer1 = setTimeout(() => {
           st.oriTimer1 = null;
           if (st.hasAbsoluteFix) return;
-          window.addEventListener('deviceorientation', onFallbackOrientation, true);
+          window.addEventListener('deviceorientation', onFallbackOrientation, false);
         }, 1500);
         return Promise.resolve(true);
       }
@@ -2889,6 +2952,8 @@
         dom.nextStepHint.classList.toggle('has-prev', st.step > 0);
         if (dom.btnCalibrate) {
           dom.btnCalibrate.classList.toggle('hidden', g.kind !== 'walk');
+          const needsRelAlign = st.sensorType === 'relative' && st.calibMode !== 'manual' && st.calibMode !== 'qr';
+          dom.btnCalibrate.classList.toggle('needs-calib', needsRelAlign && g.kind === 'walk');
         }
 
         if (g.hintLine1 && (g.kind === 'walk' || g.kind === 'stairs' || g.kind === 'ev')) {
@@ -3744,6 +3809,7 @@
             const sn = st.map.nodes[qStart];
             if (typeof sn.qrHeading === 'number') {
               st.simHeading = sn.qrHeading;
+              st.entryQrHeading = sn.qrHeading;
             }
             toast(`출발지 설정: ${sn.floor}층 ${sn.name}`, 'ok');
           }
