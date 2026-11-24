@@ -1439,7 +1439,7 @@
               복도에서 도면 위쪽(1층 행정실·교무실 방향)을 정면으로 바라보고 버튼을 누르면 실제 진북과의 각도 차이를 저장합니다.
             </div>
           </div>
-          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 269°</span>
+          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 19°</span>
         </div>
         <div class="row">
           <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
@@ -1454,7 +1454,7 @@
         <div class="preset-copy-box">
           <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
           <div class="row">
-            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 270;" />
+            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 19;" />
             <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
           </div>
         </div>
@@ -1617,7 +1617,7 @@
       const TTS_RATE = 0.96;
       // 모든 방문객 기기에 기본 적용되는 건물 도면 북쪽 기준 프리셋 각도 (0~359)
       // 학교 현장에서 편집기로 측정한 숫자를 여기에 넣고 배포하면 전 기기에 동일 적용됩니다.
-      const DEFAULT_BUILDING_NORTH_OFFSET = 269;
+      const DEFAULT_BUILDING_NORTH_OFFSET = 19;
 
       /* =====================================================================
          1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
@@ -1833,6 +1833,7 @@
         absSensor: null,
         sensorSource: 'none',    // 'none' | 'AbsoluteOrientationSensor' | 'deviceorientationabsolute' | 'webkitCompass' | 'relative'
         sensorType: 'none',      // 'none' | 'absolute' | 'relative'
+        sensorErr: '',
         hasAbsoluteFix: false,
         filteredHeading: 180,
         hasSensorFix: false,
@@ -2230,7 +2231,8 @@
         if (st.sensorType === 'absolute') {
           dom.liveCompassText.textContent = `절대 나침반(${st.sensorSource}): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
         } else {
-          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미수신): ${raw}° → 시선 ${eff}° (아래 각도 직접 입력 가능)`;
+          const errTag = st.sensorErr ? ` [${st.sensorErr}]` : '';
+          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미수신${errTag}): ${raw}° → 시선 ${eff}°`;
         }
       }
 
@@ -2296,8 +2298,10 @@
             window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
             applyAbsoluteHeading(h, 'AbsoluteSensor');
           });
-          sensor.addEventListener('error', () => {
+          sensor.addEventListener('error', (ev) => {
+            st.sensorErr = (ev && ev.error && ev.error.name) ? ev.error.name : 'SensorError';
             stopAbsoluteSensor();
+            updateCalibBadge();
           });
           sensor.start();
           st.absSensor = sensor;
