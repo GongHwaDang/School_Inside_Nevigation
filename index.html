@@ -1439,17 +1439,22 @@
               복도에서 도면 위쪽(1층 행정실·교무실 방향)을 정면으로 바라보고 버튼을 누르면 실제 진북과의 각도 차이를 저장합니다.
             </div>
           </div>
-          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">오프셋: 0°</span>
+          <span id="northOffsetBadge" class="calib-badge auto" style="font-size:12.5px;">북쪽 오프셋: 269°</span>
         </div>
         <div class="row">
           <button id="btnSaveBuildingNorth" type="button" class="btn btn-green btn-sm">🧭 현재 바라보는 방향을 도면 북쪽으로 저장</button>
           <button id="btnResetNorthOffset" type="button" class="btn btn-sm">프리셋 초기화</button>
           <span id="liveCompassText" style="font-size:12.5px; color:#0284c7; font-weight:800;">실시간 나침반: 대기 중</span>
         </div>
+        <div class="row" style="align-items:center;">
+          <label for="manualNorthIn" style="font-size:12.5px; font-weight:700; color:#334155;">📐 나침반 앱 각도 직접 입력 (0~359°):</label>
+          <input type="number" id="manualNorthIn" min="0" max="359" step="1" placeholder="예: 35" style="width:110px; min-height:38px; padding:6px 10px; font-size:14px;" />
+          <button id="btnApplyManualNorth" type="button" class="btn btn-blue btn-sm">각도 적용</button>
+        </div>
         <div class="preset-copy-box">
           <span class="label" style="font-size:12px; color:#24643a;">🌐 모든 방문객 기기에 동일 적용하는 프리셋 코드 (복사 후 HTML 상단에 붙여넣고 재배포)</span>
           <div class="row">
-            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 268;" />
+            <input type="text" id="northPresetCodeIn" class="qr-input" readonly value="const DEFAULT_BUILDING_NORTH_OFFSET = 269;" />
             <button id="btnCopyNorthPreset" type="button" class="btn btn-sky btn-sm">프리셋 코드 복사</button>
           </div>
         </div>
@@ -1612,7 +1617,7 @@
       const TTS_RATE = 0.96;
       // 모든 방문객 기기에 기본 적용되는 건물 도면 북쪽 기준 프리셋 각도 (0~359)
       // 학교 현장에서 편집기로 측정한 숫자를 여기에 넣고 배포하면 전 기기에 동일 적용됩니다.
-      const DEFAULT_BUILDING_NORTH_OFFSET = 0;
+      const DEFAULT_BUILDING_NORTH_OFFSET = 269;
 
       /* =====================================================================
          1. 본관 1~3층 SVG 건축 벡터 평면도 (1000 x 500, 김천다수초 실제 배치)
@@ -1825,6 +1830,8 @@
         lensIdx: 0,
         compassRaw: null,
         lastRelGyroHeading: null,
+        absSensor: null,
+        sensorSource: 'none',    // 'none' | 'AbsoluteOrientationSensor' | 'deviceorientationabsolute' | 'webkitCompass' | 'relative'
         sensorType: 'none',      // 'none' | 'absolute' | 'relative'
         hasAbsoluteFix: false,
         filteredHeading: 180,
@@ -1886,6 +1893,7 @@
         btnBackToAR: $('btnBackToAR'), northOffsetBadge: $('northOffsetBadge'),
         btnSaveBuildingNorth: $('btnSaveBuildingNorth'), btnResetNorthOffset: $('btnResetNorthOffset'), liveCompassText: $('liveCompassText'),
         northPresetCodeIn: $('northPresetCodeIn'), btnCopyNorthPreset: $('btnCopyNorthPreset'),
+        manualNorthIn: $('manualNorthIn'), btnApplyManualNorth: $('btnApplyManualNorth'),
         edFloorBtns: document.querySelectorAll('[data-efloor]'), toolBtns: document.querySelectorAll('[data-tool]'),
         imgInput: $('imgInput'), btnClearImg: $('btnClearImg'), edFloorTag: $('edFloorTag'), edHint: $('edHint'), editorSvg: $('editorSvg'),
         inspectPanel: $('inspectPanel'), inspectTitle: $('inspectTitle'),
@@ -2210,6 +2218,9 @@
         if (dom.northPresetCodeIn) {
           dom.northPresetCodeIn.value = `const DEFAULT_BUILDING_NORTH_OFFSET = ${deg};`;
         }
+        if (dom.manualNorthIn && document.activeElement !== dom.manualNorthIn) {
+          dom.manualNorthIn.value = deg;
+        }
         if (!st.hasSensorFix) {
           dom.liveCompassText.textContent = '실시간 나침반: 센서 대기 중';
           return;
@@ -2217,46 +2228,96 @@
         const eff = Math.round(getEffectiveHeading());
         const raw = Math.round(st.filteredHeading);
         if (st.sensorType === 'absolute') {
-          dom.liveCompassText.textContent = `절대 나침반(진북): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
+          dom.liveCompassText.textContent = `절대 나침반(${st.sensorSource}): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
         } else {
-          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미지원): ${raw}° → 시선 ${eff}°`;
+          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미수신): ${raw}° → 시선 ${eff}° (아래 각도 직접 입력 가능)`;
         }
       }
 
-      /* 절대 나침반 핸들러: 들어오는 즉시 최우선 적용 (상대 자이로에 절대 밀리지 않음) */
-      function onAbsoluteOrientation(ev) {
-        const parsed = extractCompassHeading(ev);
-        if (!parsed) return;
-        if (!parsed.isAbsolute) return;
+      /* 공통 절대 나침반 갱신기 (AbsoluteOrientationSensor / deviceorientationabsolute / iOS 공용) */
+      function applyAbsoluteHeading(heading, sourceName) {
+        if (typeof heading !== 'number' || Number.isNaN(heading)) return;
+        const h = normDeg(heading);
 
         if (st.oriTimer1) { clearTimeout(st.oriTimer1); st.oriTimer1 = null; }
-        // 혹시 켜져 있던 상대 자이로 폴백 리스너 즉시 해제
         window.removeEventListener('deviceorientation', onFallbackOrientation, true);
 
-        const heading = parsed.heading;
-        st.compassRaw = heading;
-
+        st.compassRaw = h;
         if (!st.hasAbsoluteFix) {
-          // 첫 절대 나침반 수신 시 기존 임시값/상대값을 즉시 진북 각도로 교체
-          st.filteredHeading = heading;
+          st.filteredHeading = h;
           st.hasAbsoluteFix = true;
           st.hasSensorFix = true;
           st.sensorType = 'absolute';
+          st.sensorSource = sourceName;
           if (st.calibMode === 'idle') st.calibMode = 'auto';
         } else {
-          const diff = getRelAngle(heading, st.filteredHeading);
+          st.sensorSource = sourceName;
+          const diff = getRelAngle(h, st.filteredHeading);
           if (Math.abs(diff) >= 0.35) {
-            // 실내 미세 떨림은 부드럽게 억제하되, 큰 방향 전환은 차단 없이 빠르게 추종
             const weight = Math.abs(diff) > 25 ? 0.3 : 0.2;
             st.filteredHeading = normDeg(st.filteredHeading + diff * weight);
           }
         }
-
         updateCalibBadge();
         updateHud();
       }
 
-      /* 절대 나침반 이벤트가 없는 구형 기기 전용 폴백 (절대 나침반 수신 시 자동 중단) */
+      /* W3C AbsoluteOrientationSensor 쿼터니언 [x, y, z, w] -> 후면 카메라 나침반 각도 */
+      function headingFromQuaternion(q) {
+        if (!q || q.length < 4) return null;
+        const [x, y, z, w] = q;
+        const camEast  = -2 * (x * z + w * y);
+        const camNorth =  2 * (w * x - y * z);
+        if (Math.hypot(camEast, camNorth) >= 0.3) {
+          return normDeg((Math.atan2(camEast, camNorth) * 180) / Math.PI);
+        }
+        const topEast  = 2 * (x * y - w * z);
+        const topNorth = 1 - 2 * (x * x + z * z);
+        return normDeg((Math.atan2(topEast, topNorth) * 180) / Math.PI + getScreenAngle());
+      }
+
+      function stopAbsoluteSensor() {
+        if (st.absSensor) {
+          try { st.absSensor.stop(); } catch (_) {}
+          st.absSensor = null;
+        }
+      }
+
+      /* 1순위: Chrome Generic Sensor API (AbsoluteOrientationSensor) */
+      function tryStartAbsoluteSensor() {
+        stopAbsoluteSensor();
+        if (typeof window.AbsoluteOrientationSensor !== 'function') return false;
+        try {
+          const sensor = new window.AbsoluteOrientationSensor({ frequency: 25, referenceFrame: 'device' });
+          sensor.addEventListener('reading', () => {
+            const h = headingFromQuaternion(sensor.quaternion);
+            if (h === null) return;
+            // AbsoluteOrientationSensor가 정상 동작하면 중복 이벤트 방지를 위해 레거시 리스너 제거
+            window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+            applyAbsoluteHeading(h, 'AbsoluteSensor');
+          });
+          sensor.addEventListener('error', () => {
+            stopAbsoluteSensor();
+          });
+          sensor.start();
+          st.absSensor = sensor;
+          return true;
+        } catch (_) {
+          stopAbsoluteSensor();
+          return false;
+        }
+      }
+
+      /* 2순위: deviceorientationabsolute / iOS webkitCompassHeading */
+      function onAbsoluteOrientation(ev) {
+        if (st.sensorSource === 'AbsoluteSensor' && st.hasAbsoluteFix) return;
+        const parsed = extractCompassHeading(ev);
+        if (!parsed || !parsed.isAbsolute) return;
+        const srcName = typeof ev.webkitCompassHeading === 'number' ? 'iOS나침반' : '절대센서';
+        applyAbsoluteHeading(parsed.heading, srcName);
+      }
+
+      /* 3순위: 절대 나침반이 응답하지 않을 때만 동작하는 상대 자이로 폴백 */
       function onFallbackOrientation(ev) {
         if (st.hasAbsoluteFix) {
           window.removeEventListener('deviceorientation', onFallbackOrientation, true);
@@ -2265,7 +2326,6 @@
         const parsed = extractCompassHeading(ev);
         if (!parsed) return;
 
-        // 일반 deviceorientation 이벤트에 절대 나침반이 실려 온 경우(iOS 등) 즉시 절대 모드로 승격
         if (parsed.isAbsolute) {
           onAbsoluteOrientation(ev);
           return;
@@ -2277,15 +2337,16 @@
           st.filteredHeading = curRel;
           st.hasSensorFix = true;
           st.sensorType = 'relative';
+          st.sensorSource = 'relative';
           if (st.calibMode === 'idle') st.calibMode = 'auto';
         } else {
           const delta = getRelAngle(curRel, st.lastRelGyroHeading);
           st.lastRelGyroHeading = curRel;
           if (Math.abs(delta) > 60 || Math.abs(delta) < 0.15) return;
-          // 회전량 100% 그대로 반영 (기존 0.85 감쇠 누락 제거)
           st.filteredHeading = normDeg(st.filteredHeading + delta);
           st.hasSensorFix = true;
           st.sensorType = 'relative';
+          st.sensorSource = 'relative';
         }
 
         updateCalibBadge();
@@ -2302,6 +2363,7 @@
               st.hasAbsoluteFix = false;
               st.hasSensorFix = false;
               st.sensorType = 'none';
+              st.sensorSource = 'none';
               st.lastRelGyroHeading = null;
               window.addEventListener('deviceorientation', onFallbackOrientation, true);
               return true;
@@ -2310,6 +2372,7 @@
           }).catch(() => false);
         }
 
+        stopAbsoluteSensor();
         window.removeEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
         window.removeEventListener('deviceorientation', onAbsoluteOrientation, true);
         window.removeEventListener('deviceorientation', onFallbackOrientation, true);
@@ -2318,11 +2381,14 @@
         st.hasAbsoluteFix = false;
         st.hasSensorFix = false;
         st.sensorType = 'none';
+        st.sensorSource = 'none';
         st.lastRelGyroHeading = null;
 
-        // 안드로이드: 절대 나침반만 먼저 단독 등록 (상대 자이로 선점 차단)
+        // 1순위: Generic Sensor API (AbsoluteOrientationSensor) + 2순위: deviceorientationabsolute 동시 대기
+        tryStartAbsoluteSensor();
         window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
-        // 1.5초 안에 절대 나침반이 응답하지 않는 기기에서만 폴백 활성화 (절대 리스너는 계속 유지)
+
+        // 1.5초 안에 절대 나침반이 응답하지 않는 환경에서만 상대 자이로 폴백 활성화 (절대 리스너는 계속 유지)
         st.oriTimer1 = setTimeout(() => {
           st.oriTimer1 = null;
           if (st.hasAbsoluteFix) return;
@@ -3459,11 +3525,11 @@
           toast('새 경로로 안내를 시작합니다.', 'ok');
         };
 
-        // 건물 북쪽 오프셋 보정 (절대 나침반 기준만 프리셋 저장 허용)
+        // 건물 북쪽 오프셋 보정 (절대 나침반 자동 저장 + 나침반 앱 각도 직접 입력 지원)
         dom.btnSaveBuildingNorth.onclick = () => {
           if (!st.hasAbsoluteFix || st.sensorType !== 'absolute') {
-            requestOrientation();
-            toast('절대 나침반(진북) 신호를 잡는 중입니다. 폰을 8자로 2~3번 흔든 뒤 다시 눌러주세요.', 'warn');
+            if (st.sensorType === 'none') requestOrientation();
+            toast('이 브라우저에서 절대 나침반이 차단되어 있습니다. 크롬 동작센서 권한을 허용하거나 아래 칸에 나침반 앱 각도를 직접 입력하세요.', 'warn');
             return;
           }
           const offset = Math.round(st.filteredHeading);
@@ -3475,6 +3541,23 @@
           saveMap();
           updateCalibBadge();
           toast(`절대 나침반 북쪽 기준(${offset}°) 저장 완료! 아래 프리셋 코드를 복사해 배포하세요.`, 'ok');
+        };
+        dom.btnApplyManualNorth.onclick = () => {
+          const rawVal = Number(dom.manualNorthIn.value);
+          if (dom.manualNorthIn.value === '' || Number.isNaN(rawVal)) {
+            toast('0~359 사이의 각도 숫자를 입력하세요.', 'warn');
+            dom.manualNorthIn.focus();
+            return;
+          }
+          const offset = Math.round(normDeg(rawVal));
+          st.map.buildingNorthOffset = offset;
+          st.map.presetNorthVersion = offset;
+          st.manualOffset = 0;
+          st.usingSimSlider = false;
+          st.calibMode = 'auto';
+          saveMap();
+          updateCalibBadge();
+          toast(`도면 북쪽 기준(${offset}°) 적용 완료! 아래 프리셋 코드를 복사해 배포하세요.`, 'ok');
         };
         dom.btnResetNorthOffset.onclick = () => {
           st.map.buildingNorthOffset = DEFAULT_BUILDING_NORTH_OFFSET;
