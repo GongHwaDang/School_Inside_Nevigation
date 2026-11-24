@@ -1217,6 +1217,7 @@
       }
     }
     .start-door-tip {
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1320,7 +1321,7 @@
         </div>
 
         <div id="startDoorTip" class="start-door-tip" role="note">
-          🚪 중앙현관 안쪽(복도 방향)을 바라본 상태에서 시작하세요.
+          🚶 중앙현관에서 복도로 들어와 왼쪽 복도를 바라본 상태에서 시작하세요.
         </div>
 
         <button id="btnLaunchAR" type="button" class="btn btn-cta-blue btn-shimmer btn-ar-launch">
@@ -1433,7 +1434,7 @@
       </div>
 
       <div id="routeDoorTip" class="start-door-tip" role="note">
-        🚪 출발 위치의 출입문(복도) 쪽을 바라본 상태에서 시작하세요.
+        🚶 출발 위치에서 복도로 나와 진행 방향을 바라본 상태에서 시작하세요.
       </div>
 
       <div class="row">
@@ -1450,7 +1451,7 @@
     <header class="ed-header">
       <div>
         <div style="font-size:16px; font-weight:900; color:#0f172a;">🗺️ 김천다수초 본관 도면 편집기</div>
-        <div style="font-size:12px; color:#64748b; font-weight:600;">1~3층 도면 편집 · 출입문 기준 자이로 추적 · QR URL · JSON 백업</div>
+        <div style="font-size:12px; color:#64748b; font-weight:600;">1~3층 도면 편집 · 복도 기준 자이로 추적 · QR URL · JSON 백업</div>
       </div>
       <button id="btnBackToAR" type="button" class="btn btn-blue btn-sm">◀ AR 길안내</button>
     </header>
@@ -1459,9 +1460,9 @@
       <div class="ed-card">
         <div class="row-between">
           <div>
-            <strong style="font-size:14.5px; color:#047857;">🧭 출입문 기준 자동 시작 + 자이로 추적 모드 (전 브라우저 통일)</strong>
+            <strong style="font-size:14.5px; color:#047857;">🧭 복도 기준 자동 시작 + 자이로 추적 모드 (전 브라우저 통일)</strong>
             <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
-              실내 철근·자석 간섭을 막기 위해 지자기 나침반을 끄고, 북쪽 실은 남쪽(180°)·남쪽 실은 북쪽(0°)으로 자동 시작 후 자이로로 회전을 추적합니다.
+              실내 전자기장·자석 간섭을 막기 위해 지자기 나침반을 끄고, 복도로 나와 진행 방향을 바라본 기준으로 자동 정렬한 뒤 자이로로 회전을 추적합니다.
             </div>
           </div>
           <span id="gyroModeBadge" class="calib-badge auto" style="font-size:12.5px;">지자기 미사용 · 자이로</span>
@@ -2034,16 +2035,55 @@
         } catch (_) {}
       }
 
+      let ttsSpeakSeq = 0;
+      let ttsSpeakTimer = null;
+      let destSearchTtsTimer = null;
+
+      function cancelPendingDoorSearchTts() {
+        if (destSearchTtsTimer) {
+          clearTimeout(destSearchTtsTimer);
+          destSearchTtsTimer = null;
+        }
+      }
+
+      function stopSpeech() {
+        ttsSpeakSeq++;
+        if (ttsSpeakTimer) { clearTimeout(ttsSpeakTimer); ttsSpeakTimer = null; }
+        cancelPendingDoorSearchTts();
+        if ('speechSynthesis' in window) {
+          try { window.speechSynthesis.cancel(); } catch (_) {}
+        }
+      }
+
       function speak(text) {
         if (!text || !('speechSynthesis' in window)) return;
         try {
           const spoken = formatForTTS(text);
           pickKoreanVoice();
-          window.speechSynthesis.cancel();
-          const u = new SpeechSynthesisUtterance(spoken);
-          u.lang = 'ko-KR'; u.rate = TTS_RATE; u.pitch = 1.0;
-          if (st.koVoice) u.voice = st.koVoice;
-          window.speechSynthesis.speak(u);
+          const seq = ++ttsSpeakSeq;
+          if (ttsSpeakTimer) { clearTimeout(ttsSpeakTimer); ttsSpeakTimer = null; }
+
+          const runSpeak = () => {
+            if (seq !== ttsSpeakSeq) return;
+            try {
+              if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+              const u = new SpeechSynthesisUtterance(spoken);
+              u.lang = 'ko-KR'; u.rate = TTS_RATE; u.pitch = 1.0;
+              if (st.koVoice) u.voice = st.koVoice;
+              window.speechSynthesis.speak(u);
+            } catch (_) {}
+          };
+
+          // 안드로이드 크롬·삼성 인터넷에서 발화 도중 cancel() 직후 동기 speak()가 씹히는 현상 방지
+          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            window.speechSynthesis.cancel();
+            ttsSpeakTimer = setTimeout(() => {
+              ttsSpeakTimer = null;
+              runSpeak();
+            }, 70);
+          } else {
+            runSpeak();
+          }
         } catch (_) {}
       }
 
@@ -2200,36 +2240,103 @@
         return node.y < CORRIDOR_Y ? 180 : 0;
       }
 
-      /* 시작 화면·경로 변경 시트에 표시할 출발지별 출입문 방향 안내 문구 */
-      function getDoorTipText(node) {
-        if (!node) return '🚪 출발 위치의 출입문(복도) 쪽을 바라본 상태에서 시작하세요.';
-        if (node.type === 'entrance') {
-          return `🚪 ${node.name} 안쪽(복도 방향)을 바라본 상태에서 시작하세요.`;
+      /* 출발지→목적지 첫 구간의 복도 기준 시작 방향·안내 문구·TTS 계산 */
+      function getStartCorridorPlan(startId, destId) {
+        const sn = st.map.nodes[startId];
+        const dn = st.map.nodes[destId];
+        if (!sn) {
+          return {
+            startHeading: 180,
+            kind: 'fallback',
+            uiText: '🚶 복도로 나와 진행 방향을 바라본 상태에서 시작하세요.',
+            ttsText: '복도로 나와 진행 방향을 바라보고 안내 시작 버튼을 눌러주세요.'
+          };
         }
-        if (node.type === 'stairs' || node.type === 'elevator') {
-          return `🚪 ${node.name} 출구(복도 방향)를 바라본 상태에서 시작하세요.`;
+        if (!dn || startId === destId) {
+          return {
+            startHeading: getNodeExitHeading(sn),
+            kind: 'same',
+            uiText: '📍 출발지와 다른 목적지를 선택해 주세요.',
+            ttsText: ''
+          };
         }
-        return `🚪 ${node.name} 출입문(복도) 쪽을 바라본 상태에서 시작하세요.`;
-      }
 
-      /* 목적지 선택 시 출력할 방식 1(출입문·복도 방향) 음성 안내 문구 */
-      function getDoorTipTTS(node) {
-        if (!node) return '출발 위치의 출입문, 복도 쪽을 바라보고 안내 시작 버튼을 눌러주세요.';
-        const spoken = formatForTTS(node.name);
-        if (node.type === 'entrance') {
-          return `${spoken} 안쪽, 복도 방향을 바라보고 안내 시작 버튼을 눌러주세요.`;
+        const previewRoute = simplifyRoute(findShortestPath(startId, destId));
+        if (previewRoute.length < 2) {
+          return {
+            startHeading: getNodeExitHeading(sn),
+            kind: 'none',
+            uiText: '⚠️ 연결된 경로가 없습니다. 다른 위치를 선택해 주세요.',
+            ttsText: ''
+          };
         }
-        if (node.type === 'stairs' || node.type === 'elevator') {
-          return `${spoken} 출구, 복도 방향을 바라보고 안내 시작 버튼을 눌러주세요.`;
+
+        const cur = st.map.nodes[previewRoute[0]];
+        const nxt = st.map.nodes[previewRoute[1]];
+        const spokenCur = formatForTTS(cur.name);
+        const spokenNxt = formatForTTS(nxt.name);
+
+        // 1) 출발지가 계단/엘리베이터이고 바로 층간 이동하는 경우
+        if (cur.floor !== nxt.floor) {
+          const isEv = cur.type === 'elevator' || nxt.type === 'elevator';
+          return {
+            startHeading: getNodeExitHeading(cur),
+            kind: 'vertical',
+            uiText: `${isEv ? '🛗' : '🪜'} ${cur.name}에서 바로 ${nxt.floor}층으로 이동하는 경로입니다. 안내 시작을 눌러주세요.`,
+            ttsText: `${spokenCur}에서 바로 ${nxt.floor}층으로 이동하는 경로입니다. 안내 시작 버튼을 눌러주세요.`
+          };
         }
-        return `${spoken} 출입문, 복도 쪽을 바라보고 안내 시작 버튼을 눌러주세요.`;
+
+        const dx = nxt.x - cur.x;
+        const isCorridorWalk = Math.abs(dx) >= 35;
+
+        // 2) 복도를 정면으로 건너는 경우 (예: 중앙현관↔분리수거장, 교무실↔화장실, 도서관↔서쪽계단)
+        if (!isCorridorWalk) {
+          const bearing = getBearing(cur, nxt);
+          const actionUi = cur.type === 'entrance' ? '복도로 들어와' : '복도로 나와';
+          const actionTts = cur.type === 'entrance' ? '복도로 들어온 뒤' : '복도로 나온 뒤';
+          return {
+            startHeading: bearing,
+            kind: 'across',
+            uiText: `🚶 ${cur.name}에서 ${actionUi} 정면 건너편(${nxt.name} 쪽)을 바라본 상태에서 시작하세요.`,
+            ttsText: `${spokenCur}에서 ${actionTts}, 정면 건너편 ${spokenNxt} 쪽을 바라보고 안내 시작 버튼을 눌러주세요.`
+          };
+        }
+
+        // 3) 메인 복도 이동: 복도로 나온 뒤 왼쪽/오른쪽(또는 동측출입구 정면) 복도를 바라보고 시작
+        const walkingEast = dx > 0;
+        const walkBearing = walkingEast ? 90 : 270;
+
+        if (cur.id === '1f_east_ent') {
+          return {
+            startHeading: walkBearing,
+            kind: 'corridor',
+            turnDir: '정면',
+            uiText: `🚶 ${cur.name}에서 안쪽 복도 정면을 바라본 상태에서 시작하세요.`,
+            ttsText: `${spokenCur}에서 안쪽 복도 정면을 바라보고 안내 시작 버튼을 눌러주세요.`
+          };
+        }
+
+        const exitHeading = getNodeExitHeading(cur);
+        const turnRel = getRelAngle(walkBearing, exitHeading);
+        const turnDir = turnRel < -30 ? '왼쪽' : (turnRel > 30 ? '오른쪽' : '정면');
+        const actionUi = cur.type === 'entrance' ? '복도로 들어와' : '복도로 나와';
+        const actionTts = cur.type === 'entrance' ? '복도로 들어온 뒤' : '복도로 나온 뒤';
+
+        return {
+          startHeading: walkBearing,
+          kind: 'corridor',
+          turnDir,
+          uiText: `🚶 ${cur.name}에서 ${actionUi} ${turnDir} 복도를 바라본 상태에서 시작하세요.`,
+          ttsText: `${spokenCur}에서 ${actionTts}, ${turnDir} 복도를 바라보고 안내 시작 버튼을 눌러주세요.`
+        };
       }
 
       function speakDoorTipForStart(startId, destId) {
         if (!startId || !destId || startId === destId) return;
-        const sn = st.map.nodes[startId];
-        if (!sn) return;
-        speak(getDoorTipTTS(sn));
+        const plan = getStartCorridorPlan(startId, destId);
+        if (!plan.ttsText) return;
+        speak(plan.ttsText);
       }
 
       /* W3C RelativeOrientationSensor 쿼터니언 [x, y, z, w] -> 후면 카메라 기준 연속 회전각(지자기 미사용) */
@@ -2271,16 +2378,33 @@
         return normDeg(360 - ev.alpha + getScreenAngle());
       }
 
-      /* 모든 브라우저 공통: 출발지/층이동 시 출입문 기준 방위(북/남)로 자이로 영점 자동 정렬 */
-      function alignHeadingToNodeExit(node, modeTag = 'auto-exit') {
-        if (!node) return;
-        const exitH = getNodeExitHeading(node);
-        st.simHeading = exitH;
+      /* 지정한 도면 방위각으로 자이로 영점 정렬 */
+      function alignHeadingToAngle(headingDeg, modeTag = 'auto-corridor') {
+        const targetH = normDeg(headingDeg);
+        st.simHeading = targetH;
         st.usingSimSlider = false;
         st.calibMode = modeTag;
         if (st.hasSensorFix) {
-          st.manualOffset = normDeg(exitH - st.filteredHeading);
+          st.manualOffset = normDeg(targetH - st.filteredHeading);
         }
+      }
+
+      /* 층 이동 후 새 층 도착 시 계단/엘리베이터 출구 기준 방위(북/남)로 정렬 */
+      function alignHeadingToNodeExit(node, modeTag = 'auto-exit') {
+        if (!node) return;
+        alignHeadingToAngle(getNodeExitHeading(node), modeTag);
+      }
+
+      /* 현재 단계에 맞는 자동 시작 방위 계산
+         - step === 0(복도에서 출발): 첫 구간 복도 진행 방향(walkBearing)으로 정렬
+         - step > 0(계단·E/V 이동 후 새 층): 해당 출구 방향(북/남)으로 정렬 */
+      function getExpectedStartHeadingForCurrentStep() {
+        if (st.step === 0) {
+          const plan = getStartCorridorPlan(st.startId, st.destId);
+          return plan.startHeading;
+        }
+        const curNode = st.map.nodes[st.route[st.step] || st.startId];
+        return getNodeExitHeading(curNode);
       }
 
       function getEffectiveHeading() {
@@ -2310,13 +2434,14 @@
         if (!st.hasSensorFix) {
           st.filteredHeading = h;
           st.hasSensorFix = true;
-          const curNode = st.map.nodes[st.route[st.step] || st.startId];
           const initHeading = typeof st.entryQrHeading === 'number'
             ? st.entryQrHeading
-            : getNodeExitHeading(curNode);
+            : getExpectedStartHeadingForCurrentStep();
           st.manualOffset = normDeg(initHeading - h);
           st.simHeading = initHeading;
-          st.calibMode = typeof st.entryQrHeading === 'number' ? 'qr' : 'auto-exit';
+          st.calibMode = typeof st.entryQrHeading === 'number'
+            ? 'qr'
+            : (st.step === 0 ? 'auto-corridor' : 'auto-exit');
         } else {
           const diff = getRelAngle(h, st.filteredHeading);
           // 데드밴드 없이 미세 회전도 자연스럽게 누적 (천천히 돌아도 각도 누락 없음)
@@ -2710,10 +2835,15 @@
 
         const walkingEast = dx > 0;
         const walkBearing = walkingEast ? 90 : 270;
+        // 첫 출발(step === 0)은 이미 복도로 나와 진행 방향을 바라보고 시작하므로 '앞쪽 복도 직진'으로 안내
+        const isCorridorStart = st.step === 0 && st.calibMode !== 'qr';
 
         let entryTurnText = '복도를 따라';
         let entryTurnShort = '직진';
-        if (cur.id === '1f_east_ent') {
+        if (isCorridorStart) {
+          entryTurnText = '앞쪽 복도를 따라';
+          entryTurnShort = '복도 직진';
+        } else if (cur.id === '1f_east_ent') {
           entryTurnText = '정면 복도를 따라';
           entryTurnShort = '직진';
         } else {
@@ -2875,9 +3005,14 @@
         const g = getCurrentStepGuidance();
         if (!g || !g.tts) return;
         const cur = st.map.nodes[st.route[st.step]];
-        const prefix = (isStart && cur && g.kind !== 'arrived')
-          ? `${cur.floor}층 ${formatForTTS(cur.name)}에서 안내를 시작합니다. `
-          : '';
+        let prefix = '';
+        if (isStart && cur && g.kind !== 'arrived') {
+          const isRoom = cur.type !== 'entrance' && cur.type !== 'stairs' && cur.type !== 'elevator';
+          const placePhrase = (g.kind === 'walk' && isRoom)
+            ? `${cur.floor}층 ${formatForTTS(cur.name)} 앞 복도에서`
+            : `${cur.floor}층 ${formatForTTS(cur.name)}에서`;
+          prefix = `${placePhrase} 안내를 시작합니다. `;
+        }
         speak(prefix + g.tts);
       }
 
@@ -3232,10 +3367,12 @@
       }
 
       function updateOverlayPreview() {
-        const sN = st.map.nodes[dom.overlayStartSel.value];
-        const dN = st.map.nodes[dom.overlayDestSel.value];
-        if (sN && dom.startDoorTip) {
-          dom.startDoorTip.textContent = getDoorTipText(sN);
+        const sId = dom.overlayStartSel.value;
+        const dId = dom.overlayDestSel.value;
+        const sN = st.map.nodes[sId];
+        const dN = st.map.nodes[dId];
+        if (dom.startDoorTip) {
+          dom.startDoorTip.textContent = getStartCorridorPlan(sId, dId).uiText;
         }
         if (sN && dN) {
           dom.overlayRouteText.textContent = `${sN.floor}층 ${sN.name} → ${dN.floor}층 ${dN.name}`;
@@ -3244,9 +3381,8 @@
       }
 
       function updateRouteDoorTip() {
-        const sN = st.map.nodes[dom.startSel.value];
         if (dom.routeDoorTip) {
-          dom.routeDoorTip.textContent = getDoorTipText(sN);
+          dom.routeDoorTip.textContent = getStartCorridorPlan(dom.startSel.value, dom.destSel.value).uiText;
         }
       }
 
@@ -3260,14 +3396,12 @@
       function applyOverlaySelection() {
         if (dom.overlayStartSel.value) st.startId = dom.overlayStartSel.value;
         if (dom.overlayDestSel.value) st.destId = dom.overlayDestSel.value;
-        const sn = st.map.nodes[st.startId];
-        if (sn) {
-          if (st.startId !== new URLSearchParams(window.location.search).get('start')) {
-            st.entryQrHeading = null;
-          }
-          alignHeadingToNodeExit(sn);
-        }
+        // 첫 화면에서 복도 진행 방향 안내를 보고 시작하므로 QR 진입 각도 대신 복도 진행 방향으로 정렬
+        st.entryQrHeading = null;
         recalcRoute(true, false);
+        const plan = getStartCorridorPlan(st.startId, st.destId);
+        alignHeadingToAngle(plan.startHeading, 'auto-corridor');
+        updateHud();
       }
 
       function populateRouteSelectors(filter = '', startVal = st.startId, destVal = st.destId) {
@@ -3294,10 +3428,12 @@
         dom.destSearch.value = '';
         populateRouteSelectors('', nextStart, nextDest);
         dom.routeSheetBg.classList.add('open');
+        unlockTts();
         if (isArrived && st.map.nodes[nextStart]) {
           const n = st.map.nodes[nextStart];
           toast(`도착한 ${n.floor}층 ${n.name}이(가) 출발지로 설정되었습니다.`, 'ok');
         }
+        speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
       }
 
       function updateMinimapFloorTabs() {
@@ -3335,7 +3471,7 @@
           recalcRoute(false, false);
           requestAnimationFrame(syncHudBounds);
         } else {
-          if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+          stopSpeech();
           if (!st.hasSensorFix) requestOrientation();
           setMinimapExpanded(false);
           updateCalibBadge();
@@ -3423,7 +3559,12 @@
          12. 이벤트 바인딩 (층 배지 5연타 이스터에그 포함)
          ===================================================================== */
       function bindEvents() {
-        dom.overlayStartSel.onchange = updateOverlayPreview;
+        dom.overlayStartSel.addEventListener('touchstart', unlockTts, { passive: true });
+        dom.overlayStartSel.addEventListener('mousedown', unlockTts);
+        dom.overlayStartSel.onchange = () => {
+          updateOverlayPreview();
+          speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
+        };
         dom.overlayDestSel.addEventListener('touchstart', unlockTts, { passive: true });
         dom.overlayDestSel.addEventListener('mousedown', unlockTts);
         dom.overlayDestSel.onchange = () => {
@@ -3431,15 +3572,26 @@
           speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
         };
         dom.btnOverlaySwap.onclick = () => {
+          unlockTts();
           const t = dom.overlayStartSel.value;
           dom.overlayStartSel.value = dom.overlayDestSel.value;
           dom.overlayDestSel.value = t;
           updateOverlayPreview();
+          speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
         };
+        if (dom.startDoorTip) {
+          dom.startDoorTip.onclick = () => {
+            unlockTts();
+            speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
+          };
+        }
         dom.overlayPrefBtns.forEach((b) => {
           b.onclick = () => {
+            unlockTts();
             st.verticalPref = b.dataset.overlayPref;
             syncPrefButtons();
+            updateOverlayPreview();
+            speakDoorTipForStart(dom.overlayStartSel.value, dom.overlayDestSel.value);
           };
         });
 
@@ -3561,26 +3713,65 @@
         });
 
         // 경로 선택 바텀시트
-        dom.btnCloseRoute.onclick = () => dom.routeSheetBg.classList.remove('open');
-        dom.routeSheetBg.onclick = (e) => { if (e.target === dom.routeSheetBg) dom.routeSheetBg.classList.remove('open'); };
-        dom.startSel.onchange = updateRouteDoorTip;
+        const closeRouteSheet = () => {
+          cancelPendingDoorSearchTts();
+          dom.routeSheetBg.classList.remove('open');
+        };
+        dom.btnCloseRoute.onclick = closeRouteSheet;
+        dom.routeSheetBg.onclick = (e) => { if (e.target === dom.routeSheetBg) closeRouteSheet(); };
+        dom.startSel.addEventListener('touchstart', unlockTts, { passive: true });
+        dom.startSel.addEventListener('mousedown', unlockTts);
+        dom.startSel.onchange = () => {
+          cancelPendingDoorSearchTts();
+          updateRouteDoorTip();
+          speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
+        };
         dom.destSel.addEventListener('touchstart', unlockTts, { passive: true });
         dom.destSel.addEventListener('mousedown', unlockTts);
         dom.destSel.onchange = () => {
+          cancelPendingDoorSearchTts();
+          updateRouteDoorTip();
           speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
         };
-        dom.destSearch.oninput = (e) => populateRouteSelectors(e.target.value, dom.startSel.value, dom.destSel.value);
+        dom.destSearch.oninput = (e) => {
+          const prevDest = dom.destSel.value;
+          populateRouteSelectors(e.target.value, dom.startSel.value, dom.destSel.value);
+          cancelPendingDoorSearchTts();
+          const nextDest = dom.destSel.value;
+          if (e.target.value.trim() && nextDest && nextDest !== prevDest && nextDest !== dom.startSel.value) {
+            destSearchTtsTimer = setTimeout(() => {
+              destSearchTtsTimer = null;
+              if (dom.routeSheetBg.classList.contains('open')) {
+                speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
+              }
+            }, 500);
+          }
+        };
+        if (dom.routeDoorTip) {
+          dom.routeDoorTip.onclick = () => {
+            unlockTts();
+            speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
+          };
+        }
         dom.prefBtns.forEach((b) => {
           b.onclick = () => {
+            unlockTts();
+            cancelPendingDoorSearchTts();
             st.verticalPref = b.dataset.pref;
             syncPrefButtons();
+            updateRouteDoorTip();
+            speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
           };
         });
         dom.btnSwapRoute.onclick = () => {
+          unlockTts();
+          cancelPendingDoorSearchTts();
           const t = dom.startSel.value; dom.startSel.value = dom.destSel.value; dom.destSel.value = t;
           updateRouteDoorTip();
+          speakDoorTipForStart(dom.startSel.value, dom.destSel.value);
         };
         dom.btnApplyRoute.onclick = () => {
+          cancelPendingDoorSearchTts();
           if (!dom.startSel.value || !dom.destSel.value) return;
           if (dom.startSel.value === dom.destSel.value) {
             toast('출발지와 목적지가 같습니다. 다른 목적지를 선택하세요.', 'warn');
@@ -3589,8 +3780,8 @@
           st.startId = dom.startSel.value;
           st.destId = dom.destSel.value;
           st.entryQrHeading = null;
-          const sn = st.map.nodes[st.startId];
-          if (sn) alignHeadingToNodeExit(sn);
+          const plan = getStartCorridorPlan(st.startId, st.destId);
+          alignHeadingToAngle(plan.startHeading, 'auto-corridor');
           dom.routeSheetBg.classList.remove('open');
           recalcRoute(true, dom.startOverlay.classList.contains('hidden'));
           toast('새 경로로 안내를 시작합니다.', 'ok');
@@ -3769,8 +3960,8 @@
           if (qDest && st.map.nodes[qDest]) st.destId = qDest;
           else if (st.startId === st.destId) st.destId = st.startId === '1f_admin' ? '2f_3_1' : '1f_admin';
         } catch (_) {}
-        if (st.map.nodes[st.startId]) {
-          st.simHeading = getNodeExitHeading(st.map.nodes[st.startId]);
+        if (st.map.nodes[st.startId] && st.map.nodes[st.destId]) {
+          st.simHeading = getStartCorridorPlan(st.startId, st.destId).startHeading;
         }
 
         bindEvents();
