@@ -2218,9 +2218,32 @@
         return { heading, isAbsolute: isAbs };
       }
 
+      /* 출발지/층도착 지점의 출입문 기준 시작 방위각 계산
+         - 도면 북쪽 위치(교무실·행정실·교장실·중앙현관·서쪽계단 등, y < 250): 복도 쪽 남쪽(180°)
+         - 도면 남쪽 위치(3-1·도움반·중앙계단·E/V·식당·도서관·과학실 등, y >= 250): 복도 쪽 북쪽(0°)
+         - 동측 출입구 등 별도 지정 노드: 지정된 qrHeading(270° 등) 우선 */
+      function getNodeExitHeading(node) {
+        if (!node) return 180;
+        if (typeof node.qrHeading === 'number') return normDeg(node.qrHeading);
+        return node.y < CORRIDOR_Y ? 180 : 0;
+      }
+
+      /* 절대 나침반 미수신(크롬 등 상대 자이로) 환경에서 출입문 기준 방향으로 자동 정렬
+         - 삼성 인터넷 등 절대 나침반 정상 기기에는 간섭하지 않음 */
+      function alignHeadingToNodeExit(node, modeTag = 'auto-exit') {
+        if (!node) return;
+        const exitH = getNodeExitHeading(node);
+        st.simHeading = exitH;
+        if (!st.hasAbsoluteFix && st.hasSensorFix) {
+          st.manualOffset = normDeg(exitH - st.filteredHeading);
+          st.calibMode = modeTag;
+          st.usingSimSlider = false;
+        }
+      }
+
       function getEffectiveHeading() {
         if (st.usingSimSlider || !st.hasSensorFix) return normDeg(st.simHeading);
-        if (st.calibMode === 'qr' || st.calibMode === 'manual') {
+        if (st.calibMode === 'qr' || st.calibMode === 'manual' || st.calibMode === 'auto-exit') {
           return normDeg(st.filteredHeading + st.manualOffset);
         }
         return normDeg(st.filteredHeading - (Number(st.map.buildingNorthOffset) || 0));
@@ -2245,10 +2268,11 @@
           dom.liveCompassText.textContent = `절대 나침반(${st.sensorSource}): ${raw}° → 도면 시선 ${eff}° (${getCardinalKo(eff)})`;
         } else {
           const diagParts = [];
+          if (st.calibMode === 'auto-exit') diagParts.push('출입문기준 자동');
           if (st.sensorErr) diagParts.push(st.sensorErr);
           if (st.magPermState) diagParts.push(`mag:${st.magPermState}`);
           const errTag = diagParts.length ? ` [${diagParts.join(', ')}]` : '';
-          dom.liveCompassText.textContent = `상대 자이로(절대 나침반 미수신${errTag}): ${raw}° → 시선 ${eff}°`;
+          dom.liveCompassText.textContent = `상대 자이로(${errTag ? errTag.slice(2, -1) : '절대 나침반 미수신'}): 시선 ${eff}° (${getCardinalKo(eff)})`;
         }
       }
 
@@ -2267,7 +2291,11 @@
           st.hasSensorFix = true;
           st.sensorType = 'absolute';
           st.sensorSource = sourceName;
-          if (st.calibMode === 'idle') st.calibMode = 'auto';
+          // 절대 나침반 수신 시 임시 출입문 기준 보정(auto-exit)을 해제하고 실제 진북 나침반으로 전환
+          if (st.calibMode === 'idle' || st.calibMode === 'auto-exit') {
+            st.manualOffset = 0;
+            st.calibMode = 'auto';
+          }
         } else {
           st.sensorSource = sourceName;
           const diff = getRelAngle(h, st.filteredHeading);
@@ -2392,17 +2420,14 @@
           st.sensorType = 'relative';
           st.sensorSource = 'relative';
 
-          // 벽면 QR(?start=...)로 진입한 경우 상대 자이로만으로도 QR 방향에 자동 정렬
-          if (typeof st.entryQrHeading === 'number') {
-            st.manualOffset = normDeg(st.entryQrHeading - curRel);
-            st.calibMode = 'qr';
-          } else {
-            if (st.calibMode === 'idle') st.calibMode = 'auto';
-            if (!st.relNoticeShown && st.mode === 'nav' && dom.startOverlay.classList.contains('hidden')) {
-              st.relNoticeShown = true;
-              toast('진행 방향을 바라보고 우측 [🎯 정면 맞춤]을 한 번 눌러주세요.', 'warn');
-            }
-          }
+          // 절대 나침반 미수신 브라우저(크롬 등): 출발 지점의 출입문 방향(북쪽방→남쪽 180°, 남쪽방→북쪽 0°)으로 시작 방위 자동 고정
+          const curNode = st.map.nodes[st.route[st.step] || st.startId];
+          const initHeading = typeof st.entryQrHeading === 'number'
+            ? st.entryQrHeading
+            : getNodeExitHeading(curNode);
+          st.manualOffset = normDeg(initHeading - curRel);
+          st.calibMode = typeof st.entryQrHeading === 'number' ? 'qr' : 'auto-exit';
+          st.simHeading = initHeading;
         } else {
           const delta = getRelAngle(curRel, st.lastRelGyroHeading);
           st.lastRelGyroHeading = curRel;
@@ -2455,12 +2480,12 @@
         tryStartAbsoluteSensor();
         window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, false);
 
-        // 1.5초 안에 절대 나침반이 응답하지 않는 환경에서만 상대 자이로 폴백 활성화 (절대 리스너는 계속 유지)
+        // 1초 안에 절대 나침반이 응답하지 않는 환경(크롬 등)에서만 상대 자이로 폴백 활성화 (절대 리스너는 계속 유지)
         st.oriTimer1 = setTimeout(() => {
           st.oriTimer1 = null;
           if (st.hasAbsoluteFix) return;
           window.addEventListener('deviceorientation', onFallbackOrientation, false);
-        }, 1500);
+        }, 1000);
         return Promise.resolve(true);
       }
 
@@ -2506,13 +2531,13 @@
               const node = st.map.nodes[nodeId];
               st.startId = nodeId;
               st.usingSimSlider = false;
-              if (typeof node.qrHeading === 'number') {
-                if (st.hasSensorFix) {
-                  st.manualOffset = normDeg(node.qrHeading - st.filteredHeading);
-                  st.calibMode = 'qr';
-                } else {
-                  st.simHeading = node.qrHeading;
-                }
+              const qrExitH = getNodeExitHeading(node);
+              st.entryQrHeading = qrExitH;
+              if (st.hasSensorFix) {
+                st.manualOffset = normDeg(qrExitH - st.filteredHeading);
+                st.calibMode = 'qr';
+              } else {
+                st.simHeading = qrExitH;
               }
               updateCalibBadge();
               recalcRoute(true, false);
@@ -2952,8 +2977,7 @@
         dom.nextStepHint.classList.toggle('has-prev', st.step > 0);
         if (dom.btnCalibrate) {
           dom.btnCalibrate.classList.toggle('hidden', g.kind !== 'walk');
-          const needsRelAlign = st.sensorType === 'relative' && st.calibMode !== 'manual' && st.calibMode !== 'qr';
-          dom.btnCalibrate.classList.toggle('needs-calib', needsRelAlign && g.kind === 'walk');
+          dom.btnCalibrate.classList.remove('needs-calib');
         }
 
         if (g.hintLine1 && (g.kind === 'walk' || g.kind === 'stairs' || g.kind === 'ev')) {
@@ -3287,8 +3311,11 @@
         if (dom.overlayStartSel.value) st.startId = dom.overlayStartSel.value;
         if (dom.overlayDestSel.value) st.destId = dom.overlayDestSel.value;
         const sn = st.map.nodes[st.startId];
-        if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
-          st.simHeading = sn.qrHeading;
+        if (sn) {
+          if (st.startId !== new URLSearchParams(window.location.search).get('start')) {
+            st.entryQrHeading = null;
+          }
+          alignHeadingToNodeExit(sn);
         }
         recalcRoute(true, false);
       }
@@ -3512,12 +3539,25 @@
 
         // 하단 컨트롤
         dom.btnPrevStep.onclick = () => {
-          if (st.step > 0) { st.step--; rebuildMinimapSvg(true); updateHud(); announceCurrentStep(false); }
+          if (st.step <= 0) return;
+          const prevNode = st.map.nodes[st.route[st.step]];
+          st.step--;
+          const cur = st.map.nodes[st.route[st.step]];
+          if (cur && prevNode && cur.floor !== prevNode.floor && !st.hasAbsoluteFix) {
+            alignHeadingToNodeExit(cur);
+          }
+          if (cur && !st.miniExpanded) st.miniPreviewFloor = cur.floor;
+          rebuildMinimapSvg(true); updateHud(); announceCurrentStep(false);
         };
         dom.btnNextStep.onclick = () => {
           if (st.step >= st.route.length - 1) return;
+          const prevNode = st.map.nodes[st.route[st.step]];
           st.step++;
           const cur = st.map.nodes[st.route[st.step]];
+          // 계단·엘리베이터로 층 이동 후 새 층에 내리면 상대 자이로 기기는 출입구 기준 방위(북/남)로 자동 재정렬
+          if (cur && prevNode && cur.floor !== prevNode.floor && !st.hasAbsoluteFix) {
+            alignHeadingToNodeExit(cur);
+          }
           if (cur && !st.miniExpanded) st.miniPreviewFloor = cur.floor;
           rebuildMinimapSvg(true);
           updateHud();
@@ -3585,10 +3625,9 @@
           }
           st.startId = dom.startSel.value;
           st.destId = dom.destSel.value;
+          st.entryQrHeading = null;
           const sn = st.map.nodes[st.startId];
-          if (sn && typeof sn.qrHeading === 'number' && !st.hasSensorFix) {
-            st.simHeading = sn.qrHeading;
-          }
+          if (sn) alignHeadingToNodeExit(sn);
           dom.routeSheetBg.classList.remove('open');
           recalcRoute(true, dom.startOverlay.classList.contains('hidden'));
           toast('새 경로로 안내를 시작합니다.', 'ok');
@@ -3807,15 +3846,17 @@
             st.startId = qStart;
             dom.startQrBadge.classList.remove('hidden');
             const sn = st.map.nodes[qStart];
-            if (typeof sn.qrHeading === 'number') {
-              st.simHeading = sn.qrHeading;
-              st.entryQrHeading = sn.qrHeading;
-            }
+            const initExit = getNodeExitHeading(sn);
+            st.simHeading = initExit;
+            st.entryQrHeading = initExit;
             toast(`출발지 설정: ${sn.floor}층 ${sn.name}`, 'ok');
           }
           if (qDest && st.map.nodes[qDest]) st.destId = qDest;
           else if (st.startId === st.destId) st.destId = st.startId === '1f_admin' ? '2f_3_1' : '1f_admin';
         } catch (_) {}
+        if (st.map.nodes[st.startId]) {
+          st.simHeading = getNodeExitHeading(st.map.nodes[st.startId]);
+        }
 
         bindEvents();
         updateCalibBadge();
